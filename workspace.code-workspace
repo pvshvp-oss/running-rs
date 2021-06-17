@@ -1,0 +1,18 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+	},
+	"extensions": {
+		"recommendations": [
+			"tamasfe.even-better-toml",
+			"webfreak.debug",
+			"matklad.rust-analyzer",
+			"yzhang.markdown-all-in-one",
+			"davidanson.vscode-markdownlint"
+		]
+	}
+}
