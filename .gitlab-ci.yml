@@ -22,7 +22,7 @@ stages:
 
 rust-nightly:
   stage: build
-  image: rust:nightly
+  image: rustlang/rust:nightly
   before_script:
     - rustc --version 
     - cargo --version
@@ -41,7 +41,7 @@ rust-latest:
 
 test-code:
   stage: test
-  image: rust:nightly
+  image: rustlang/rust:nightly
   before_script:
     - rustc --version 
     - cargo --version
@@ -52,7 +52,7 @@ test-code:
 
 lint-code:
   stage: test
-  image: rust:nightly
+  image: rustlang/rust:nightly
   before_script:
     - cargo --version
   script:
@@ -63,7 +63,7 @@ lint-code:
 
 audit-code:
   stage: test
-  image: rust:nightly
+  image: rustlang/rust:nightly
   before_script:
     - cargo --version
   script:
@@ -72,7 +72,7 @@ audit-code:
 
 generate-documentation:
   stage: document
-  image: rust:nightly
+  image: rustlang/rust:nightly
   before_script:
     - cargo --version
   script:
