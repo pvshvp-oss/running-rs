@@ -1,0 +1,85 @@
+# Official language image. Look for the different tagged releases at:
+# https://hub.docker.com/r/library/rust/tags/
+
+# Optional: Pick zero or more services to be used on all builds.
+# Only needed when using a docker container to run your tests in.
+# Check out: http://docs.gitlab.com/ee/ci/docker/using_docker_images.html#what-is-a-service
+# services:
+#   - mysql:latest
+#   - redis:latest
+#   - postgres:latest
+
+# Optional: Install a C compiler, cmake and git into the container.
+# You will often need this when you (or any of your dependencies) depends on C code.
+# before_script:
+#   - apt-get update -yqq
+#   - apt-get install -yqq --no-install-recommends build-essential
+
+stages:
+  - build
+  - test
+  - document
+
+rust-nightly:
+  stage: build
+  image: rust:nightly
+  before_script:
+    - rustc --version 
+    - cargo --version
+  script:
+    - cargo build --verbose
+
+rust-latest:
+  stage: build
+  image: rust:latest
+  before_script:
+    - rustc --version 
+    - cargo --version
+  script:
+    - cargo build --verbose
+  allow_failure: true
+
+test-code:
+  stage: test
+  image: rust:nightly
+  before_script:
+    - rustc --version 
+    - cargo --version
+  script:
+    - cargo test
+    - cargo install cargo-tarpaulin
+    - cargo tarpaulin --ignore-tests
+
+lint-code:
+  stage: test
+  image: rust:nightly
+  before_script:
+    - cargo --version
+  script:
+    - rustup component add rustfmt
+    - cargo fmt -- --check
+    - rustup component add clippy
+    - cargo clippy -- -D warnings
+
+audit-code:
+  stage: test
+  image: rust:nightly
+  before_script:
+    - cargo --version
+  script:
+    - cargo install cargo-audit
+    - cargo audit
+
+generate-documentation:
+  stage: document
+  image: rust:nightly
+  before_script:
+    - cargo --version
+  script:
+    - cargo doc
+    - rm -rf public/* # clear out old files
+    - cp -r target/doc/. public/ # copy the web pages to the public directory
+  allow_failure: true
+
+
+
