@@ -16,28 +16,8 @@
 #   - apt-get install -yqq --no-install-recommends build-essential
 
 stages:
-  - build
   - test
   - document
-
-rust-nightly:
-  stage: build
-  image: rustlang/rust:nightly
-  before_script:
-    - rustc --version 
-    - cargo --version
-  script:
-    - cargo build --verbose
-
-rust-latest:
-  stage: build
-  image: rust:latest
-  before_script:
-    - rustc --version 
-    - cargo --version
-  script:
-    - cargo build --verbose
-  allow_failure: true
 
 test-code:
   stage: test
@@ -46,9 +26,15 @@ test-code:
     - rustc --version 
     - cargo --version
   script:
+    - cargo build --verbose
+    - mkdir builds
+    - cp -r target builds/ 
     - cargo test
     - cargo install cargo-tarpaulin
     - cargo tarpaulin --ignore-tests
+  artifacts:
+    paths:
+      - builds
 
 lint-code:
   stage: test
