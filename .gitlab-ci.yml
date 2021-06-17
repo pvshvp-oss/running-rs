@@ -56,7 +56,7 @@ audit-code:
     - cargo install cargo-audit
     - cargo audit
 
-generate-documentation:
+pages:
   stage: document
   image: rustlang/rust:nightly
   before_script:
