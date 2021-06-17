@@ -80,6 +80,9 @@ generate-documentation:
     - rm -rf public/* # clear out old files
     - cp -r target/doc/. public/ # copy the web pages to the public directory
   allow_failure: true
+  artifacts:
+    paths:
+      - public
 
 
 
