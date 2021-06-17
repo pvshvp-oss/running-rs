@@ -28,7 +28,7 @@ test-code:
   script:
     - cargo build --verbose
     - mkdir builds
-    - cp -r target builds/ 
+    - cp -r target/* builds/ 
     - cargo test
     - cargo install cargo-tarpaulin
     - cargo tarpaulin --ignore-tests
@@ -68,7 +68,8 @@ generate-documentation:
   allow_failure: true
   artifacts:
     paths:
-      - public
+    - public
+
 
 
 
