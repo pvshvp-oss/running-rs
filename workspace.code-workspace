@@ -12,7 +12,8 @@
 			"webfreak.debug",
 			"matklad.rust-analyzer",
 			"yzhang.markdown-all-in-one",
-			"davidanson.vscode-markdownlint"
+			"davidanson.vscode-markdownlint",
+			"stkb.rewrap"
 		]
 	}
 }
