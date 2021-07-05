@@ -10,16 +10,14 @@ repository = "https://gitlab.com/shivanandvp/running-rs.git"
 keywords = ["commands", "execute", "batch", "jobs", "tasks"] 
 
 [dependencies]
-futures = {version = "0.3.6", optional = true}
-async-trait = {version = "0.1.41", optional = true}
-tokio = {version = "0.3.1", features = ["full"], optional = true}
-log = {version = "0.4.11", optional = true}
-fern = {version = "0.6.0", features = ["colored"], optional = true}
-chrono = {version = "0.4.15", optional = true}
+log = {version = "0.4.11", optional = false}
+futures = {version = "0.3.6", optional = false}
+async-trait = {version = "0.1.41", optional = false}
+tokio = {version = "0.3.1", features = ["full"], optional = false}
 
-[features]
-async = ["futures", "async-trait", "tokio"]
-log = ["log", "fern", "chrono"]
+[dev-dependencies]
+fern = {version = "0.6.0", features = ["colored"], optional = false}
+chrono = {version = "0.4.15", optional = false}
 
 [badges]
 maintenance = { status = "experimental" }

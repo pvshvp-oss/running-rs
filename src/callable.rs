@@ -3,6 +3,74 @@
 use crate::{generate_task_id, GenericErrorType, Runnable};
 use std::{fmt::Debug, panic, panic::AssertUnwindSafe};
 
+// CUSTOM TYPES
+
+pub type GenericErrorType = Box<(dyn GenericErrorTraits)>; // a generic error type
+pub type GenericReturnType = Box<(dyn GenericReturnTraits)>; // a generic return type
+
+// TRAIT ALIASES
+
+pub trait GenericErrorTraits = Any + Send; // traits for a generic error type
+pub trait GenericReturnTraits = Any + Send; // traits for a generic return type
+
+#[cfg(feature = "logging")]
+fn try_string_from<R: GenericReturnTraits>(value: &R) -> Option<String> {
+    // IMPORTS
+    use std::ffi::{OsStr, OsString};
+    use std::path::{Path, PathBuf};
+
+    let value_any = value as &dyn Any;
+    if let Some(inner) = value_any.downcast_ref::<String>() {
+        Some(inner.clone())
+    } else if let Some(inner) = value_any.downcast_ref::<&str>() {
+        Some(String::from(inner.to_string()))
+    } else if let Some(inner) = value_any.downcast_ref::<OsString>() {
+        Some(String::from(inner.to_string_lossy()))
+    } else if let Some(inner) = value_any.downcast_ref::<&OsStr>() {
+        Some(String::from(inner.to_string_lossy()))
+    } else if let Some(inner) = value_any.downcast_ref::<PathBuf>() {
+        Some(String::from(inner.as_path().to_string_lossy()))
+    } else if let Some(inner) = value_any.downcast_ref::<&Path>() {
+        Some(String::from(inner.to_string_lossy()))
+    } else if let Some(_) = value_any.downcast_ref::<()>() {
+        Some(String::from("()"))
+    } else if let Some(inner) = value_any.downcast_ref::<usize>() {
+        Some(String::from(inner.to_string()))
+    } else if let Some(inner) = value_any.downcast_ref::<u8>() {
+        Some(String::from(inner.to_string()))
+    } else if let Some(inner) = value_any.downcast_ref::<u16>() {
+        Some(String::from(inner.to_string()))
+    } else if let Some(inner) = value_any.downcast_ref::<u32>() {
+        Some(String::from(inner.to_string()))
+    } else if let Some(inner) = value_any.downcast_ref::<u64>() {
+        Some(String::from(inner.to_string()))
+    } else if let Some(inner) = value_any.downcast_ref::<u128>() {
+        Some(String::from(inner.to_string()))
+    } else if let Some(inner) = value_any.downcast_ref::<isize>() {
+        Some(String::from(inner.to_string()))
+    } else if let Some(inner) = value_any.downcast_ref::<i8>() {
+        Some(String::from(inner.to_string()))
+    } else if let Some(inner) = value_any.downcast_ref::<i16>() {
+        Some(String::from(inner.to_string()))
+    } else if let Some(inner) = value_any.downcast_ref::<i32>() {
+        Some(String::from(inner.to_string()))
+    } else if let Some(inner) = value_any.downcast_ref::<i64>() {
+        Some(String::from(inner.to_string()))
+    } else if let Some(inner) = value_any.downcast_ref::<i128>() {
+        Some(String::from(inner.to_string()))
+    } else if let Some(inner) = value_any.downcast_ref::<f32>() {
+        Some(String::from(inner.to_string()))
+    } else if let Some(inner) = value_any.downcast_ref::<f64>() {
+        Some(String::from(inner.to_string()))
+    } else if let Some(inner) = value_any.downcast_ref::<char>() {
+        Some(String::from(inner.to_string()))
+    } else if let Some(inner) = value_any.downcast_ref::<bool>() {
+        Some(String::from(inner.to_string()))
+    } else {
+        None
+    }
+}
+
 #[cfg(feature = "async")]
 use async_trait::async_trait;
 
