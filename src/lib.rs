@@ -12,37 +12,59 @@
 //! *external commands* (programs, scripts, and operating system commands), or a
 //! set of them with optional live logging and optional asynchrony.
 
+// IMPORTS
+
+use std::any::Any;
+
 // DECLARE MODULES
 
 mod callable; // for types and traits pertaining to the execution of functions and closures
-mod command; // for types and traits pertaining to the execution of programs, scripts, and operating system commands
-mod log; // for types and traits pertaining to logging
-mod task; // for types and traits pertaining to the execution of a batch of callables and commands
+mod instruction; // for types and traits pertaining to the execution of programs, scripts, and operating system commands
+// mod logging; // for types and traits pertaining to logging
+mod runnable; // for types and traits pertaining to the execution of a batch of callables and commands
 
 // API FACADE
 
 pub use crate::callable::*; // export the types and traits in callable.rs for public use
-pub use crate::command::*; // export the types and traits in command.rs for public use
-pub use crate::log::*; // export the types and traits in log.rs for public use
-pub use crate::task::*; // export the types and traits in task.rs for public use
+pub use crate::instruction::*; // export the types and traits in command.rs for public use
+// pub use crate::logging::*; // export the types and traits in log.rs for public use
+pub use crate::runnable::*; // export the types and traits in task.rs for public use
+
+// CUSTOM TYPES
+
+pub trait GenericErrorTraits = Any + Send; // traits for a generic error type
+pub trait GenericReturnTraits = Any + Send; // traits for a generic return type
+pub type GenericErrorType = Box<(dyn GenericErrorTraits)>; // a generic error type
+pub type GenericReturnType = Box<(dyn GenericReturnTraits)>; // a generic return type
+
+pub trait LoggingType{}
+pub struct LoggedKind{}
+impl LoggingType for LoggedKind{}
+pub struct UnLoggedKind{}
+impl LoggingType for UnLoggedKind{}
+
+pub trait SynchronyType{}
+pub struct AsynchronousKind{}
+impl SynchronyType for AsynchronousKind{}
+pub struct BlockingKind{}
+impl SynchronyType for BlockingKind{}
 
 #[cfg(test)]
 mod tests {
 
     // IMPORTS
 
-    use std::sync::Once;
-    use fern::colors::{Color, ColoredLevelConfig};
+    use fern::colors::{Color, ColoredLevelConfig}; // for setting up logging colors on the console
+    use std::sync::Once; // for calling the log initialization once
 
     // GLOBAL VARIABLES
 
-    pub static INIT: Once = Once::new();
+    pub static LOGGING_INITIALIZER: Once = Once::new();
 
     // FUNCTIONS
 
     pub fn setup_logging(verbosity: log::LevelFilter) -> () {
-            
-        INIT.call_once(|| {
+        LOGGING_INITIALIZER.call_once(|| {
             let mut base_config = fern::Dispatch::new();
             base_config = match verbosity {
                 log::LevelFilter::Off => base_config
@@ -107,14 +129,5 @@ mod tests {
                 .apply()
                 .unwrap();
         })
-    }
-
-    // TESTS
-
-    #[test]
-    #[cfg(feature = "logging")]
-    fn try_string_from() {
-        let value: isize = 5;
-        assert_eq!(String::from("5"), crate::try_string_from(&value).unwrap())
     }
 }

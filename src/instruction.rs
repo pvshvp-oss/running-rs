@@ -6,15 +6,10 @@ use std::{
 };
 
 #[cfg(feature = "async")]
-use {
-    async_trait::async_trait,
-    tokio::process::Child,
-};
+use {async_trait::async_trait, tokio::process::Child};
 
 #[cfg(not(feature = "async"))]
-use {
-    std::process::Child,
-};
+use std::process::Child;
 
 // TODO
 /*
@@ -26,13 +21,13 @@ use {
 // STRUCT DECLARATIONS
 
 #[cfg(not(feature = "async"))]
-pub struct Command {    
+pub struct Command {
     inner_command: std::process::Command,
     result: Option<std::io::Result<Child>>,
 }
 
 #[cfg(feature = "async")]
-pub struct Command {    
+pub struct Command {
     inner_command: tokio::process::Command,
     result: Option<std::io::Result<Child>>,
 }

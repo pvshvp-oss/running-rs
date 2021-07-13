@@ -1,88 +1,16 @@
 // IMPORTS
 
-use crate::{generate_task_id, GenericErrorType, Runnable};
-use std::{fmt::Debug, panic, panic::AssertUnwindSafe};
-
-// CUSTOM TYPES
-
-pub type GenericErrorType = Box<(dyn GenericErrorTraits)>; // a generic error type
-pub type GenericReturnType = Box<(dyn GenericReturnTraits)>; // a generic return type
-
-// TRAIT ALIASES
-
-pub trait GenericErrorTraits = Any + Send; // traits for a generic error type
-pub trait GenericReturnTraits = Any + Send; // traits for a generic return type
-
-#[cfg(feature = "logging")]
-fn try_string_from<R: GenericReturnTraits>(value: &R) -> Option<String> {
-    // IMPORTS
-    use std::ffi::{OsStr, OsString};
-    use std::path::{Path, PathBuf};
-
-    let value_any = value as &dyn Any;
-    if let Some(inner) = value_any.downcast_ref::<String>() {
-        Some(inner.clone())
-    } else if let Some(inner) = value_any.downcast_ref::<&str>() {
-        Some(String::from(inner.to_string()))
-    } else if let Some(inner) = value_any.downcast_ref::<OsString>() {
-        Some(String::from(inner.to_string_lossy()))
-    } else if let Some(inner) = value_any.downcast_ref::<&OsStr>() {
-        Some(String::from(inner.to_string_lossy()))
-    } else if let Some(inner) = value_any.downcast_ref::<PathBuf>() {
-        Some(String::from(inner.as_path().to_string_lossy()))
-    } else if let Some(inner) = value_any.downcast_ref::<&Path>() {
-        Some(String::from(inner.to_string_lossy()))
-    } else if let Some(_) = value_any.downcast_ref::<()>() {
-        Some(String::from("()"))
-    } else if let Some(inner) = value_any.downcast_ref::<usize>() {
-        Some(String::from(inner.to_string()))
-    } else if let Some(inner) = value_any.downcast_ref::<u8>() {
-        Some(String::from(inner.to_string()))
-    } else if let Some(inner) = value_any.downcast_ref::<u16>() {
-        Some(String::from(inner.to_string()))
-    } else if let Some(inner) = value_any.downcast_ref::<u32>() {
-        Some(String::from(inner.to_string()))
-    } else if let Some(inner) = value_any.downcast_ref::<u64>() {
-        Some(String::from(inner.to_string()))
-    } else if let Some(inner) = value_any.downcast_ref::<u128>() {
-        Some(String::from(inner.to_string()))
-    } else if let Some(inner) = value_any.downcast_ref::<isize>() {
-        Some(String::from(inner.to_string()))
-    } else if let Some(inner) = value_any.downcast_ref::<i8>() {
-        Some(String::from(inner.to_string()))
-    } else if let Some(inner) = value_any.downcast_ref::<i16>() {
-        Some(String::from(inner.to_string()))
-    } else if let Some(inner) = value_any.downcast_ref::<i32>() {
-        Some(String::from(inner.to_string()))
-    } else if let Some(inner) = value_any.downcast_ref::<i64>() {
-        Some(String::from(inner.to_string()))
-    } else if let Some(inner) = value_any.downcast_ref::<i128>() {
-        Some(String::from(inner.to_string()))
-    } else if let Some(inner) = value_any.downcast_ref::<f32>() {
-        Some(String::from(inner.to_string()))
-    } else if let Some(inner) = value_any.downcast_ref::<f64>() {
-        Some(String::from(inner.to_string()))
-    } else if let Some(inner) = value_any.downcast_ref::<char>() {
-        Some(String::from(inner.to_string()))
-    } else if let Some(inner) = value_any.downcast_ref::<bool>() {
-        Some(String::from(inner.to_string()))
-    } else {
-        None
-    }
-}
-
-#[cfg(feature = "async")]
+use crate::generate_task_id;
+use crate::GenericErrorType;
+use crate::Runnable;
+use crate::{AsynchronousKind, BlockingKind, SynchronyType};
+use crate::{LoggedKind, LoggingType, UnLoggedKind};
 use async_trait::async_trait;
-
-#[cfg(feature = "logging")]
-use {
-    crate::{Loggable, LoggingData, LoggingPreferences},
-    std::borrow::Cow,
-};
+use std::{fmt::Debug, panic, panic::AssertUnwindSafe};
+use std::marker::PhantomData;
 
 // MACROS
 
-#[cfg(not(feature = "logging"))]
 #[allow(unused_macros)]
 macro_rules! callable{
     ( $first_parent:ident $(:: $path_fragment_type_a:ident)* $(. $path_fragment_type_b:ident)* ( $($arguments:expr),* ) ) => {
@@ -95,36 +23,108 @@ macro_rules! callable{
     };
 }
 
-#[cfg(feature = "logging")]
 #[allow(unused_macros)]
-macro_rules! callable{
+macro_rules! logged_callable{
     ( $first_parent:ident $(:: $path_fragment_type_a:ident)* $(. $path_fragment_type_b:ident)* ( $($arguments:expr),* ) ) => {
         {
             let callback = || -> _ {
                 $first_parent $(:: $path_fragment_type_a)* $(. $path_fragment_type_b)* ($($arguments),*)
             };
-            $crate::Function::new(callback, stringify!($first_parent$(::$path_fragment_type_a)*$(.$path_fragment_type_b)*)).args((), stringify!($($arguments),*))
+            $crate::Callable::new(callback, stringify!($first_parent$(::$path_fragment_type_a)*$(.$path_fragment_type_b)*)).args((), stringify!($($arguments),*))
         }
     };
 }
 
 // STRUCT DECLARATIONS
 
-#[cfg(not(feature = "logging"))]
-pub struct Function<A, R, F>
+pub enum Callable<A, R, F, L= UnLoggedKind, S= BlockingKind>
+where
+    F: FnOnce<A, Output = R>,
+    L: LoggingType,
+    S: SynchronyType,
+{
+    UnLoggedBlockingCallable(
+        Option<A>, // a tuple struct representing the arguments
+        Option<R>, // the return value
+        F,         // the callable's handle
+        PhantomData<(L,S)>,
+    ),
+    UnLoggedAsyncCallable(
+        Option<A>, // a tuple struct representing the arguments
+        Option<R>, // the return value
+        F,         // the callable's handle
+        PhantomData<(L,S)>,
+    ),
+    LoggedBlockingCallable(
+        usize,     // a unique identifier for the task
+        Option<A>, // a tuple struct representing the arguments
+        Option<R>, // the return value
+        F,         // the callable's handle
+        PhantomData<(L,S)>,
+    ),
+    LoggedAsyncCallable(
+        usize,     // a unique identifier for the task
+        Option<A>, // a tuple struct representing the arguments
+        Option<R>, // the return value
+        F,         // the callable's handle
+        PhantomData<(L,S)>,
+    ),
+}
+
+impl<A, R, F> Callable<A, R, F, UnLoggedKind, BlockingKind>
 where
     F: FnOnce<A, Output = R>,
 {
-    id: usize,
+    pub fn new(handle: F) -> Callable<A, R, F, UnLoggedKind, BlockingKind> {
+        return Callable::UnLoggedBlockingCallable(
+            None,   // a tuple struct representing the arguments
+            None,   // the return value
+            handle, // the callable's handle
+            PhantomData,
+        );
+    }
+
+    pub fn args(&mut self, arguments: A) -> &Self {
+        self.arguments = Some(arguments);
+        &self
+    }
+}
+
+impl<A, R, F> Callable<A, R, F, LoggedKind, BlockingKind>
+where
+    F: FnOnce<A, Output = R>,
+{
+    pub fn new(handle: F) -> Callable<A, R, F, UnLoggedKind, BlockingKind> {
+        return Callable::UnLoggedBlockingCallable(
+            None,   // a tuple struct representing the arguments
+            None,   // the return value
+            handle, // the callable's handle
+            PhantomData,
+        );
+    }
+
+    pub fn args(&mut self, arguments: A) -> &Self {
+        self.arguments = Some(arguments);
+        &self
+    }
+}
+
+pub struct Callable<A, R, F, L = UnLoggedKind, S = BlockingKind>
+where
+    F: FnOnce<A, Output = R>,
+    L: LoggingType,
+    S: SynchronyType,
+{
     handle: Option<F>,
     arguments: Option<A>,
     output: Option<Result<R, GenericErrorType>>,
 }
 
-#[cfg(feature = "logging")]
-pub struct Function<'a, 'b, 'c, A, R, F>
+pub struct Callable<'a, 'b, 'c, A, R, F, L = LoggedKind, S = BlockingKind>
 where
     F: FnOnce<A, Output = R>,
+    L: LoggingType,
+    S: SynchronyType,
 {
     id: usize,
     handle: Option<F>,
@@ -133,6 +133,17 @@ where
     logging_preferences: LoggingPreferences<'a>,
     logging_data: LoggingData<'b, 'c>,
 }
+
+// Type aliases for variations
+
+// pub type LoggedCallable<A, R, F, B> = Callable<A, R, F, LoggedKind, B>;
+// pub type UnLoggedCallable<A, R, F, B> = Callable<A, R, F, UnLoggedKind, B>;
+// pub type LoggedBlockingCallable<A, R, F> = Callable<A, R, F, LoggedKind, BlockingKind>;
+// pub type LoggedAsyncCallable<A, R, F> = Callable<A, R, F, LoggedKind, AsynchronousKind>;
+// pub type UnLoggedBlockingCallable<A, R, F> = Callable<A, R, F, UnLoggedKind, BlockingKind>;
+// pub type UnLoggedAsyncCallable<A, R, F> = Callable<A, R, F, UnLoggedKind, AsynchronousKind>;
+// pub type BlockingCallable<A, R, F, L> = Callable<A, R, F, L, BlockingKind>;
+// pub type AsyncCallable<A, R, F, L> = Callable<A, R, F, L, AsynchronousKind>;
 
 // MODULE LEVEL FUNCTIONS
 
@@ -177,7 +188,6 @@ where
     }
 }
 
-#[cfg(feature = "logging")]
 impl<'a, 'b, 'c, A, R, F> Function<'a, 'b, 'c, A, R, F>
 where
     F: FnOnce<A, Output = R>,
@@ -324,17 +334,14 @@ mod tests {
 
     use crate::Runnable;
 
-    #[cfg(feature = "async")]
     use futures::executor::block_on;
 
-    #[cfg(feature = "logging")]
     use crate::tests::setup_logging;
 
     // TESTS
 
     #[test]
     fn vector_pop() {
-        #[cfg(feature = "logging")]
         setup_logging(log::LevelFilter::Debug);
 
         let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5, 6];
@@ -444,5 +451,12 @@ mod tests {
         callable.run();
 
         callable.output.unwrap().unwrap();
+    }
+
+    #[test]
+    #[cfg(feature = "logging")]
+    fn try_string_from() {
+        let value: isize = 5;
+        assert_eq!(String::from("5"), crate::try_string_from(&value).unwrap())
     }
 }
