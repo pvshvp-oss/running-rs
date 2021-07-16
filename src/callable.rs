@@ -11,7 +11,7 @@ use std::{fmt::Debug, panic, panic::AssertUnwindSafe};
 // MACROS
 
 /// A macro where functions and closures can be written similar to
-/// `callable(GreatGrandparent::Grandparent.Parent(argument_1, argument_2,...
+/// `callable!(GreatGrandparent::Grandparent.Parent(argument_1, argument_2,...
 /// argument_n))`. This creates an `UnLoggedBlockingCallable` object
 #[allow(unused_macros)]
 macro_rules! callable{
@@ -26,7 +26,7 @@ macro_rules! callable{
 }
 
 /// A macro where functions and closures can be written similar to
-/// `logged_callable(GreatGrandparent::Grandparent.Parent(argument_1, argument_2,...
+/// `logged_callable!(GreatGrandparent::Grandparent.Parent(argument_1, argument_2,...
 /// argument_n))`. This creates a `LoggedBlockingCallable` object
 #[allow(unused_macros)]
 macro_rules! logged_callable{
