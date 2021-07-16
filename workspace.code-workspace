@@ -5,6 +5,8 @@
 		}
 	],
 	"settings": {
+		"rewrap.autoWrap.enabled": true,
+		"rewrap.reformat": true
 	},
 	"extensions": {
 		"recommendations": [

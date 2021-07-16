@@ -20,34 +20,46 @@ use std::any::Any;
 
 mod callable; // for types and traits pertaining to the execution of functions and closures
 mod instruction; // for types and traits pertaining to the execution of programs, scripts, and operating system commands
-// mod logging; // for types and traits pertaining to logging
 mod runnable; // for types and traits pertaining to the execution of a batch of callables and commands
 
 // API FACADE
 
 pub use crate::callable::*; // export the types and traits in callable.rs for public use
 pub use crate::instruction::*; // export the types and traits in command.rs for public use
-// pub use crate::logging::*; // export the types and traits in log.rs for public use
 pub use crate::runnable::*; // export the types and traits in task.rs for public use
 
 // CUSTOM TYPES
 
-pub trait GenericErrorTraits = Any + Send; // traits for a generic error type
-pub trait GenericReturnTraits = Any + Send; // traits for a generic return type
-pub type GenericErrorType = Box<(dyn GenericErrorTraits)>; // a generic error type
-pub type GenericReturnType = Box<(dyn GenericReturnTraits)>; // a generic return type
+/// A trait for a general error type
+pub trait GeneralErrorTrait = Any + Send;
+/// A trait for a genera return type
+pub trait GeneralReturnTrait = Any + Send;
 
-pub trait LoggingType{}
-pub struct LoggedKind{}
-impl LoggingType for LoggedKind{}
-pub struct UnLoggedKind{}
-impl LoggingType for UnLoggedKind{}
+/// A type representing a general error type
+pub type GeneralErrorType = Box<(dyn GeneralErrorTrait)>;
+/// A type representing a general return type
+pub type GeneralReturnType = Box<(dyn GeneralReturnTrait)>; // a generic return type
 
-pub trait SynchronyType{}
-pub struct AsynchronousKind{}
-impl SynchronyType for AsynchronousKind{}
-pub struct BlockingKind{}
-impl SynchronyType for BlockingKind{}
+/// A trait that is implemented by the types of logging supported (LoggedKind and UnLoggedKind)
+pub trait LoggingType {}
+/// An empty type to indicate that something is logged
+pub struct LoggedKind {}
+/// An empty type to indicate that something is not logged
+pub struct UnLoggedKind {}
+
+/// A trait that is implemented by the types of synchrony supported (BlockingKind and AsyncKind)
+pub trait SynchronyType {}
+/// An empty type to indicate that something is blocking
+pub struct BlockingKind {}
+/// An empty type to indicate that something is asynchronous
+pub struct AsyncKind {}
+
+// TRAIT IMPLEMENTATIONS
+
+impl LoggingType for LoggedKind {}
+impl LoggingType for UnLoggedKind {}
+impl SynchronyType for BlockingKind {}
+impl SynchronyType for AsyncKind {}
 
 #[cfg(test)]
 mod tests {
@@ -63,6 +75,7 @@ mod tests {
 
     // FUNCTIONS
 
+    /// Initializes logging once, only the first time it is called
     pub fn setup_logging(verbosity: log::LevelFilter) -> () {
         LOGGING_INITIALIZER.call_once(|| {
             let mut base_config = fern::Dispatch::new();

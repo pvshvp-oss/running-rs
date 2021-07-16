@@ -3,7 +3,7 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use async_trait::async_trait;
-use crate::{AsynchronousKind, BlockingKind, SynchronyType};
+use crate::{AsyncKind, BlockingKind, SynchronyType};
 
 // GLOBAL VARIABLES
 
@@ -28,7 +28,7 @@ pub struct Job {
 The generic variable `R` refers to the return type whereas `E` refers to the error type.
 */
 #[async_trait]
-pub trait Runnable<S = AsynchronousKind> 
+pub trait Runnable<S = AsyncKind> 
 where
     S:SynchronyType  
 {
