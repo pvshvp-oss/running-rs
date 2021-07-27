@@ -1,5 +1,3 @@
-// IMPORTS
-
 use crate::generate_task_id;
 use crate::GeneralErrorType;
 use crate::Runnable;
@@ -7,8 +5,6 @@ use crate::{AsyncKind, BlockingKind, SynchronyType};
 use crate::{LoggedKind, LoggingType, UnLoggedKind};
 use std::marker::PhantomData;
 use std::{fmt::Debug, panic, panic::AssertUnwindSafe};
-
-// MACROS
 
 /// A macro where functions and closures can be written similar to
 /// `callable!(GreatGrandparent::Grandparent.Parent(argument_1, argument_2,...
@@ -55,9 +51,9 @@ struct AtomicCallable<
     arguments: Option<A>, // a tuple representing the arguments
 }
 
-/// An enumeration denoting a callable object, like a function or a closure,
+/// A struct denoting a callable object, like a function or a closure,
 /// that usually implements one of Fn, FnOnce or FnMut. It accounts for logging
-/// and asynchronous variants. It is declared as an enumeration because
+/// and asynchronous variants. The inner data is declared as an enumeration because
 /// specializing a generic struct to have different variables is not yet
 /// possible
 #[derive(Debug, Clone)]
@@ -79,6 +75,11 @@ pub type Function<A, R, F, L, S> = Callable<A, R, F, L, S>;
 pub type Method<A, R, F, L, S> = Callable<A, R, F, L, S>;
 pub type Closure<A, R, F, L, S> = Callable<A, R, F, L, S>;
 
+/// An enumeration denoting a callable object, like a function or a closure,
+/// that usually implements one of Fn, FnOnce or FnMut. It accounts for logging
+/// and asynchronous variants. It is declared as an enumeration because
+/// specializing a generic struct to have different variables is not yet
+/// possible
 #[derive(Debug, Clone)]
 enum CallableInner<
     A, // arguments as a tuple
