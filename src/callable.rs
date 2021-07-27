@@ -42,14 +42,46 @@ macro_rules! logged_callable{
 
 // STRUCT DECLARATIONS
 
+/// Stores the minimum information needed define a callable
+#[derive(Debug, Clone, Copy)]
+struct AtomicCallable<
+    A, // arguments as a tuple
+    R, // return type
+    F, // Fn trait (like Fn, FnOnce, and FnMut)
+> where
+    F: FnOnce<A, Output = R>,
+{
+    handle: F,            // the callable's handle
+    arguments: Option<A>, // a tuple representing the arguments
+}
+
 /// An enumeration denoting a callable object, like a function or a closure,
 /// that usually implements one of Fn, FnOnce or FnMut. It accounts for logging
 /// and asynchronous variants. It is declared as an enumeration because
 /// specializing a generic struct to have different variables is not yet
 /// possible
 #[derive(Debug, Clone)]
-pub enum Callable<
-    A, // arguments as a tuple struct
+pub struct Callable<
+    A, // arguments as a tuple
+    R, // return type
+    F, // Fn trait (like Fn, FnOnce, and FnMut)
+    L, // Logging type: either LoggedKind or UnLoggedKind
+    S, // Synchrony type: either BlockingKind or AsyncKind
+> where
+    F: FnOnce<A, Output = R>,
+    L: LoggingType,
+    S: SynchronyType,
+{
+    inner_callable: CallableInner<A, R, F, L, S>,
+}
+
+pub type Function<A, R, F, L, S> = Callable<A, R, F, L, S>;
+pub type Method<A, R, F, L, S> = Callable<A, R, F, L, S>;
+pub type Closure<A, R, F, L, S> = Callable<A, R, F, L, S>;
+
+#[derive(Debug, Clone)]
+enum CallableInner<
+    A, // arguments as a tuple
     R, // return type
     F, // Fn trait (like Fn, FnOnce, and FnMut)
     L, // Logging type: either LoggedKind or UnLoggedKind
@@ -65,23 +97,11 @@ pub enum Callable<
     LoggedAsyncCallableOuter(LoggedAsyncCallable<A, R, F, L, S>),
 }
 
-/// Stores the minimum information needed define a callable
-#[derive(Debug, Clone, Copy)]
-struct AtomicCallable<
-    A, // arguments as a tuple struct
-    R, // return type
-    F, // Fn trait (like Fn, FnOnce, and FnMut)
-> where
-    F: FnOnce<A, Output = R>,
-{
-    handle: F,            // the callable's handle
-    arguments: Option<A>, // a tuple struct representing the arguments
-}
 
 /// Represents a callable object that is blocking (synchronous) and is not logged
 #[derive(Debug, Clone)]
 struct UnLoggedBlockingCallable<
-    A,                // arguments as a tuple struct
+    A,                // arguments as a tuple
     R,                // return type
     F,                // Fn trait (like Fn, FnOnce, and FnMut)
     L = UnLoggedKind, // Logging type: either LoggedKind or UnLoggedKind
@@ -98,7 +118,7 @@ struct UnLoggedBlockingCallable<
 /// Represents a callable object that is asynchronous and is not logged
 #[derive(Debug, Clone)]
 struct UnLoggedAsyncCallable<
-    A,                // arguments as a tuple struct
+    A,                // arguments as a tuple
     R,                // return type
     F,                // Fn trait (like Fn, FnOnce, and FnMut)
     L = UnLoggedKind, // Logging type: either LoggedKind or UnLoggedKind
@@ -115,7 +135,7 @@ struct UnLoggedAsyncCallable<
 /// Represents a callable object that is blocking (synchronous) and is logged
 #[derive(Debug, Clone)]
 struct LoggedBlockingCallable<
-    A,                // arguments as a tuple struct
+    A,                // arguments as a tuple
     R,                // return type
     F,                // Fn trait (like Fn, FnOnce, and FnMut)
     L = LoggedKind,   // Logging type: either LoggedKind or UnLoggedKind
@@ -127,13 +147,14 @@ struct LoggedBlockingCallable<
 {
     task_id: usize, // a task ID used to match input with the output
     atomic_callable: AtomicCallable<A, R, F>, // a callable that only contains the minimum information needed to store it
+    
     phantom_data: PhantomData<(L, S)>, // phantom data to make use of types L and S so that the compiler does not complain
 }
 
 /// Represents a callable object that is asynchronous and is logged
 #[derive(Debug, Clone)]
 struct LoggedAsyncCallable<
-    A,              // arguments as a tuple struct
+    A,              // arguments as a tuple
     R,              // return type
     F,              // Fn trait (like Fn, FnOnce, and FnMut)
     L = LoggedKind, // Logging type: either LoggedKind or UnLoggedKind
@@ -148,9 +169,10 @@ struct LoggedAsyncCallable<
     phantom_data: PhantomData<(L, S)>, // phantom data to make use of types L and S so that the compiler does not complain
 }
 
+/// Implementation of the callable type which is blocking, but unlogged
 impl<A, R, F>
     Callable<
-        A,            // arguments as a tuple struct
+        A,            // arguments as a tuple
         R,            // return type
         F,            // Fn trait (like Fn, FnOnce, and FnMut)
         UnLoggedKind, // Logging type: either LoggedKind or UnLoggedKind
@@ -159,35 +181,54 @@ impl<A, R, F>
 where
     F: FnOnce<A, Output = R>,
 {
-    pub fn new(handle: F) -> Callable<A, R, F, UnLoggedKind, BlockingKind> {
+    /// Create a new callable with the handle's identifier. The handle must
+    /// either be a function or a closure that implements FnOnce, Fn, or FnMut
+    /// as a consequence
+    pub fn new(
+        handle: F
+    ) -> Callable<A, R, F, UnLoggedKind, BlockingKind> {
         return Callable::UnLoggedBlockingCallableOuter(UnLoggedBlockingCallable {
             atomic_callable: AtomicCallable::new(handle),
             phantom_data: PhantomData,
         });
     }
 
-    pub fn args(&mut self, arguments: A) -> &Self {
-        self.arguments = Some(arguments);
-        &self
+    /// Provide the arguments for a callable's handle
+    pub fn args(mut self, arguments: A) -> Self {
+        self.atomic_callable.arguments = Some(arguments);
+        return self
     }
 }
 
-impl<A, R, F> Callable<A, R, F, LoggedKind, BlockingKind>
+/// Implementation of the callable type which is blocking, but logged
+impl<A, R, F>
+    Callable<
+        A,            // arguments as a tuple
+        R,            // return type
+        F,            // Fn trait (like Fn, FnOnce, and FnMut)
+        LoggedKind, // Logging type: either LoggedKind or UnLoggedKind
+        BlockingKind, // Synchrony type: either BlockingKind or AsyncKind
+    >
 where
     F: FnOnce<A, Output = R>,
 {
-    pub fn new(handle: F) -> Callable<A, R, F, UnLoggedKind, BlockingKind> {
-        return Callable::UnLoggedBlockingCallable(
-            None,   // a tuple struct representing the arguments
-            None,   // the return value
-            handle, // the callable's handle
-            PhantomData,
-        );
+    /// Create a new callable with the handle's identifier. The handle must
+    /// either be a function or a closure that implements FnOnce, Fn, or FnMut
+    /// as a consequence
+    pub fn new(
+        handle: F
+    ) -> Callable<A, R, F, LoggedKind, BlockingKind> {
+        return Callable::LoggedBlockingCallableOuter(LoggedBlockingCallable {
+            atomic_callable: AtomicCallable::new(handle),
+            phantom_data: PhantomData,
+        });
     }
 
+    /// Provide the arguments for a callable's handle
     pub fn args(&mut self, arguments: A) -> &Self {
+        if let 
         self.arguments = Some(arguments);
-        &self
+        return &self
     }
 }
 
