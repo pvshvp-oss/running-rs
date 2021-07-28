@@ -1,42 +1,55 @@
 use crate::generate_task_id;
 use crate::GeneralErrorType;
-use crate::Runnable;
+// use crate::Runnable;
 use crate::{AsyncKind, BlockingKind, SynchronyType};
 use crate::{LoggedKind, LoggingType, UnLoggedKind};
 use std::marker::PhantomData;
 use std::{fmt::Debug, panic, panic::AssertUnwindSafe};
 
-/// A macro where functions and closures can be written similar to
-/// `callable!(GreatGrandparent::Grandparent.Parent(argument_1, argument_2,...
-/// argument_n))`. This creates an `UnLoggedBlockingCallable` object
-#[allow(unused_macros)]
-macro_rules! callable{
-    ( $first_parent:ident $(:: $path_fragment_type_a:ident)* $(. $path_fragment_type_b:ident)* ( $($arguments:expr),* ) ) => {
-        {
-            let callback = || -> _ {
-                $first_parent $(:: $path_fragment_type_a)* $(. $path_fragment_type_b)* ($($arguments),*)
-            };
-            $crate::Callable::new(callback).args(())
-        }
-    };
+enum CallableLoggingFormatToken {
+    Handle,
+    Arguments,
+    ArbitraryString(String),
 }
 
-/// A macro where functions and closures can be written similar to
-/// `logged_callable!(GreatGrandparent::Grandparent.Parent(argument_1, argument_2,...
-/// argument_n))`. This creates a `LoggedBlockingCallable` object
-#[allow(unused_macros)]
-macro_rules! logged_callable{
-    ( $first_parent:ident $(:: $path_fragment_type_a:ident)* $(. $path_fragment_type_b:ident)* ( $($arguments:expr),* ) ) => {
-        {
-            let callback = || -> _ {
-                $first_parent $(:: $path_fragment_type_a)* $(. $path_fragment_type_b)* ($($arguments),*)
-            };
-            $crate::Callable::new(callback, stringify!($first_parent$(::$path_fragment_type_a)*$(.$path_fragment_type_b)*)).args((), stringify!($($arguments),*))
-        }
-    };
+/// The logging format for callables
+#[derive(Debug, Clone)]
+pub struct CallableLoggingFormat {
+    format: Vec<CallableLoggingFormatToken>,
 }
 
-// STRUCT DECLARATIONS
+type CallableLoggingFormatBuilder = CallableLoggingFormat;
+
+impl CallableLoggingFormat {
+    pub fn new() -> Self {
+        CallableLoggingFormat { format: Vec::new() }
+    }
+
+    pub fn append_handle(self) -> Self {
+        self.format.append(CallableLoggingFormatToken::Handle);
+        return self;
+    }
+
+    pub fn append_arguments(self) -> Self {
+        self.format.append(CallableLoggingFormatToken::Arguments);
+        return self;
+    }
+
+    pub fn append_string<S: Into<String>>(self, given_string: S) -> Self {
+        self.format
+            .append(CallableLoggingFormatToken::ArbitraryString(
+                given_string.into(),
+            ));
+        return self;
+    }
+}
+
+/// The logging data for callables
+#[derive(Debug, Clone)]
+struct CallableLoggingData {
+    handle: String,
+    arguments: String,
+}
 
 /// Stores the minimum information needed define a callable
 #[derive(Debug, Clone, Copy)]
@@ -58,6 +71,7 @@ struct AtomicCallable<
 /// possible
 #[derive(Debug, Clone)]
 pub struct Callable<
+    'a,
     A, // arguments as a tuple
     R, // return type
     F, // Fn trait (like Fn, FnOnce, and FnMut)
@@ -68,12 +82,12 @@ pub struct Callable<
     L: LoggingType,
     S: SynchronyType,
 {
-    inner_callable: CallableInner<A, R, F, L, S>,
+    inner_callable: CallableInner<'a, A, R, F, L, S>,
 }
 
-pub type Function<A, R, F, L, S> = Callable<A, R, F, L, S>;
-pub type Method<A, R, F, L, S> = Callable<A, R, F, L, S>;
-pub type Closure<A, R, F, L, S> = Callable<A, R, F, L, S>;
+pub type Function<'a, A, R, F, L, S> = Callable<'a, A, R, F, L, S>;
+pub type Method<'a, A, R, F, L, S> = Callable<'a, A, R, F, L, S>;
+pub type Closure<'a, A, R, F, L, S> = Callable<'a, A, R, F, L, S>;
 
 /// An enumeration denoting a callable object, like a function or a closure,
 /// that usually implements one of Fn, FnOnce or FnMut. It accounts for logging
@@ -82,22 +96,22 @@ pub type Closure<A, R, F, L, S> = Callable<A, R, F, L, S>;
 /// possible
 #[derive(Debug, Clone)]
 enum CallableInner<
-    A, // arguments as a tuple
-    R, // return type
-    F, // Fn trait (like Fn, FnOnce, and FnMut)
-    L, // Logging type: either LoggedKind or UnLoggedKind
-    S, // Synchrony type: either BlockingKind or AsyncKind
+    'a, // lifetime of a logging format specifier, if it exists
+    A,  // arguments as a tuple
+    R,  // return type
+    F,  // Fn trait (like Fn, FnOnce, and FnMut)
+    L,  // Logging type: either LoggedKind or UnLoggedKind
+    S,  // Synchrony type: either BlockingKind or AsyncKind
 > where
     F: FnOnce<A, Output = R>,
     L: LoggingType,
     S: SynchronyType,
 {
-    UnLoggedBlockingCallableOuter(UnLoggedBlockingCallable<A, R, F, L, S>),
-    UnLoggedAsyncCallableOuter(UnLoggedAsyncCallable<A, R, F, L, S>),
-    LoggedBlockingCallableOuter(LoggedBlockingCallable<A, R, F, L, S>),
-    LoggedAsyncCallableOuter(LoggedAsyncCallable<A, R, F, L, S>),
+    UnLoggedBlockingCallableOuter(UnLoggedBlockingCallable<A, R, F>),
+    UnLoggedAsyncCallableOuter(UnLoggedAsyncCallable<A, R, F>),
+    LoggedBlockingCallableOuter(LoggedBlockingCallable<'a, A, R, F>),
+    LoggedAsyncCallableOuter(LoggedAsyncCallable<'a, A, R, F>),
 }
-
 
 /// Represents a callable object that is blocking (synchronous) and is not logged
 #[derive(Debug, Clone)]
@@ -112,7 +126,7 @@ struct UnLoggedBlockingCallable<
     L: LoggingType,
     S: SynchronyType,
 {
-    atomic_callable: AtomicCallable<A, R, F>, // a callable that only contains the minimum information needed to store it
+    atomic_callable: Option<AtomicCallable<A, R, F>>, // a callable that only contains the minimum information needed to store it
     phantom_data: PhantomData<(L, S)>, // phantom data to make use of types L and S so that the compiler does not complain
 }
 
@@ -129,13 +143,14 @@ struct UnLoggedAsyncCallable<
     L: LoggingType,
     S: SynchronyType,
 {
-    atomic_callable: AtomicCallable<A, R, F>, // a callable that only contains the minimum information needed to store it
+    atomic_callable: Option<AtomicCallable<A, R, F>>, // a callable that only contains the minimum information needed to store it
     phantom_data: PhantomData<(L, S)>, // phantom data to make use of types L and S so that the compiler does not complain
 }
 
 /// Represents a callable object that is blocking (synchronous) and is logged
 #[derive(Debug, Clone)]
 struct LoggedBlockingCallable<
+    'a,               // lifetime of a logging format specifier, if it exists
     A,                // arguments as a tuple
     R,                // return type
     F,                // Fn trait (like Fn, FnOnce, and FnMut)
@@ -147,14 +162,16 @@ struct LoggedBlockingCallable<
     S: SynchronyType,
 {
     task_id: usize, // a task ID used to match input with the output
-    atomic_callable: AtomicCallable<A, R, F>, // a callable that only contains the minimum information needed to store it
-    
+    atomic_callable: Option<AtomicCallable<A, R, F>>, // a callable that only contains the minimum information needed to store it
+    logging_format: Option<&'a CallableLoggingFormat>, // logging format for callables
+    logging_data: Option<CallableLoggingData>, // logging data for callables
     phantom_data: PhantomData<(L, S)>, // phantom data to make use of types L and S so that the compiler does not complain
 }
 
 /// Represents a callable object that is asynchronous and is logged
 #[derive(Debug, Clone)]
 struct LoggedAsyncCallable<
+    'a,             // lifetime of a logging format specifier, if it exists
     A,              // arguments as a tuple
     R,              // return type
     F,              // Fn trait (like Fn, FnOnce, and FnMut)
@@ -166,13 +183,16 @@ struct LoggedAsyncCallable<
     S: SynchronyType,
 {
     task_id: usize, // a task ID used to match input with the output
-    atomic_callable: AtomicCallable<A, R, F>, // a callable that only contains the minimum information needed to store it
+    atomic_callable: Option<AtomicCallable<A, R, F>>, // a callable that only contains the minimum information needed to store it
+    logging_format: Option<&'a CallableLoggingFormat>, // logging format for callables
+    logging_data: Option<CallableLoggingData>, // logging data for callables
     phantom_data: PhantomData<(L, S)>, // phantom data to make use of types L and S so that the compiler does not complain
 }
 
 /// Implementation of the callable type which is blocking, but unlogged
-impl<A, R, F>
+impl<'a, A, R, F>
     Callable<
+        'a,           // lifetime of a logging format specifier, if it exists
         A,            // arguments as a tuple
         R,            // return type
         F,            // Fn trait (like Fn, FnOnce, and FnMut)
@@ -185,29 +205,36 @@ where
     /// Create a new callable with the handle's identifier. The handle must
     /// either be a function or a closure that implements FnOnce, Fn, or FnMut
     /// as a consequence
-    pub fn new(
-        handle: F
-    ) -> Callable<A, R, F, UnLoggedKind, BlockingKind> {
-        return Callable::UnLoggedBlockingCallableOuter(UnLoggedBlockingCallable {
-            atomic_callable: AtomicCallable::new(handle),
-            phantom_data: PhantomData,
-        });
+    pub fn new(handle: F) -> Self {
+        return Callable {
+            inner_callable: CallableInner::UnLoggedBlockingCallableOuter(
+                UnLoggedBlockingCallable {
+                    atomic_callable: Some(AtomicCallable::new(handle)),
+                    phantom_data: PhantomData,
+                },
+            ),
+        };
     }
 
     /// Provide the arguments for a callable's handle
     pub fn args(mut self, arguments: A) -> Self {
-        self.atomic_callable.arguments = Some(arguments);
-        return self
+        if let CallableInner::UnLoggedBlockingCallableOuter(unlogged_blocking_callable) =
+            self.inner_callable
+        {
+            unlogged_blocking_callable.arguments = Some(arguments);
+        }
+        return self;
     }
 }
 
 /// Implementation of the callable type which is blocking, but logged
-impl<A, R, F>
+impl<'a, A, R, F>
     Callable<
+        'a,           // lifetime of a logging format specifier, if it exists
         A,            // arguments as a tuple
         R,            // return type
         F,            // Fn trait (like Fn, FnOnce, and FnMut)
-        LoggedKind, // Logging type: either LoggedKind or UnLoggedKind
+        LoggedKind,   // Logging type: either LoggedKind or UnLoggedKind
         BlockingKind, // Synchrony type: either BlockingKind or AsyncKind
     >
 where
@@ -216,58 +243,96 @@ where
     /// Create a new callable with the handle's identifier. The handle must
     /// either be a function or a closure that implements FnOnce, Fn, or FnMut
     /// as a consequence
-    pub fn new(
-        handle: F
-    ) -> Callable<A, R, F, LoggedKind, BlockingKind> {
-        return Callable::LoggedBlockingCallableOuter(LoggedBlockingCallable {
-            atomic_callable: AtomicCallable::new(handle),
-            phantom_data: PhantomData,
-        });
+    pub fn new<S: Into<String>>(handle: F, handle_string: S) -> Self {
+        return Callable {
+            inner_callable: CallableInner::LoggedBlockingCallableOuter(LoggedBlockingCallable {
+                task_id: generate_task_id(),
+                logging_format: None,
+                logging_data: CallableLoggingData {
+                    handle: handle_string.into(),
+                    arguments: String::new(),
+                },
+                atomic_callable: Some(AtomicCallable::new(handle)),
+                phantom_data: PhantomData,
+            }),
+        };
     }
 
     /// Provide the arguments for a callable's handle
-    pub fn args(&mut self, arguments: A) -> &Self {
-        if let 
-        self.arguments = Some(arguments);
-        return &self
+    pub fn args<S: Into<String>>(mut self, arguments: A, arguments_string: S) -> Self {
+        if let CallableInner::LoggedBlockingCallableOuter(logged_blocking_callable) =
+            self.inner_callable
+        {
+            logged_blocking_callable.arguments = Some(arguments);
+            logged_blocking_callable.logging_data.arguments = arguments_string.into();
+        }
+        return self;
     }
 }
 
-pub struct Callable<A, R, F, L = UnLoggedKind, S = BlockingKind>
+impl<'a, A, R, F, L, S>
+    Callable<
+        'a, // lifetime of a logging format specifier, if it exists
+        A,  // arguments as a tuple
+        R,  // return type
+        F,  // Fn trait (like Fn, FnOnce, and FnMut)
+        L,  // Logging type: either LoggedKind or UnLoggedKind
+        S,  // Synchrony type: either BlockingKind or AsyncKind
+    >
 where
     F: FnOnce<A, Output = R>,
     L: LoggingType,
     S: SynchronyType,
 {
-    handle: Option<F>,
-    arguments: Option<A>,
-    output: Option<Result<R, GeneralErrorType>>,
+    pub fn run(self) -> Result<R, GeneralErrorType>{
+        return panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
+            self.atomic_callable.handle.call_once(self.atomic_callable.arguments);
+            self.atomic_callable = None;
+        }));
+    }
 }
 
-pub struct Callable<'a, 'b, 'c, A, R, F, L = LoggedKind, S = BlockingKind>
+impl<'a, A, R, F, L, S>
+    Callable<
+        'a, // lifetime of a logging format specifier, if it exists
+        A,  // arguments as a tuple
+        R,  // return type
+        F,  // Fn trait (like Fn, FnOnce, and FnMut)
+        L,  // Logging type: either LoggedKind or UnLoggedKind
+        S,  // Synchrony type: either BlockingKind or AsyncKind
+    >
 where
-    F: FnOnce<A, Output = R>,
+    F: Fn<A, Output = R>,
     L: LoggingType,
     S: SynchronyType,
 {
-    id: usize,
-    handle: Option<F>,
-    arguments: Option<A>,
-    output: Option<Result<R, GeneralErrorType>>,
-    logging_preferences: LoggingPreferences<'a>,
-    logging_data: LoggingData<'b, 'c>,
+    pub fn run(self) -> Result<R, GeneralErrorType>{
+        return panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
+            self.atomic_callable.handle.call(self.atomic_callable.arguments);
+        }));
+    }
 }
 
-// Type aliases for variations
-
-// pub type LoggedCallable<A, R, F, B> = Callable<A, R, F, LoggedKind, B>;
-// pub type UnLoggedCallable<A, R, F, B> = Callable<A, R, F, UnLoggedKind, B>;
-// pub type LoggedBlockingCallable<A, R, F> = Callable<A, R, F, LoggedKind, BlockingKind>;
-// pub type LoggedAsyncCallable<A, R, F> = Callable<A, R, F, LoggedKind, AsyncKind>;
-// pub type UnLoggedBlockingCallable<A, R, F> = Callable<A, R, F, UnLoggedKind, BlockingKind>;
-// pub type UnLoggedAsyncCallable<A, R, F> = Callable<A, R, F, UnLoggedKind, AsyncKind>;
-// pub type BlockingCallable<A, R, F, L> = Callable<A, R, F, L, BlockingKind>;
-// pub type AsyncCallable<A, R, F, L> = Callable<A, R, F, L, AsyncKind>;
+impl<'a, A, R, F, L, S>
+    Callable<
+        'a, // lifetime of a logging format specifier, if it exists
+        A,  // arguments as a tuple
+        R,  // return type
+        F,  // Fn trait (like Fn, FnOnce, and FnMut)
+        L,  // Logging type: either LoggedKind or UnLoggedKind
+        S,  // Synchrony type: either BlockingKind or AsyncKind
+    >
+where
+    F: Fn<A, Output = R>,
+    L: LoggingType,
+    S: SynchronyType,
+{
+    pub fn run(self) -> Result<R, GeneralErrorType>{
+        return panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
+            self.atomic_callable.handle.call_mut(self.atomic_callable.arguments);
+        }));
+    }
+}
 
 // MODULE LEVEL FUNCTIONS
 
@@ -278,175 +343,6 @@ where
     return Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
         handle.call_once(arguments)
     })));
-}
-
-// STRUCT IMPLEMENTATIONS
-
-#[cfg(not(feature = "logging"))]
-impl<A, R, F> Function<A, R, F>
-where
-    F: FnOnce<A, Output = R>,
-{
-    // PUBLIC METHODS
-
-    pub fn new(handle: F) -> Self {
-        Function {
-            id: generate_task_id(),
-            handle: Some(handle),
-            arguments: None,
-            output: None,
-        }
-    }
-
-    pub fn args(mut self, arguments: A) -> Self {
-        self.arguments = Some(arguments);
-        self
-    }
-
-    // PRIVATE METHODS
-
-    fn run_function(&mut self) {
-        let handle = self.handle.take().unwrap();
-        let arguments = self.arguments.take().unwrap();
-        self.output = run_function(handle, arguments);
-    }
-}
-
-impl<'a, 'b, 'c, A, R, F> Function<'a, 'b, 'c, A, R, F>
-where
-    F: FnOnce<A, Output = R>,
-{
-    // PUBLIC METHODS
-
-    pub fn new<S: Into<Cow<'b, str>>>(handle: F, handle_string: S) -> Self {
-        let mut callable = Function {
-            id: generate_task_id(),
-            handle: Some(handle),
-            arguments: None,
-            output: None,
-            logging_data: LoggingData {
-                input: handle_string.into(),
-                output: "".into(),
-            },
-            logging_preferences: LoggingPreferences::default(),
-        };
-        callable
-            .logging_preferences
-            .set_label(format!("task_id: {}", callable.id));
-        callable
-    }
-
-    pub fn args<S: Into<Cow<'b, str>>>(mut self, arguments: A, argument_string: S) -> Self {
-        self.arguments = Some(arguments);
-        let mut input_string: String =
-            format!("{}({})", self.logging_data.input, argument_string.into());
-        input_string.retain(|c| !c.is_whitespace());
-        self.logging_data.input = input_string.into();
-        self
-    }
-
-    pub fn set_logging_preferences(&mut self, logging_preferences: LoggingPreferences<'a>) {
-        self.logging_preferences = logging_preferences;
-    }
-
-    // PRIVATE METHODS
-
-    fn run_function(&mut self) {
-        let handle = self.handle.take().unwrap();
-        let arguments = self.arguments.take().unwrap();
-        self.output = run_function(handle, arguments);
-    }
-}
-
-// TRAIT IMPLEMENTATIONS
-
-#[cfg(feature = "logging")]
-impl<'a, 'b, 'c, A, R, F> Loggable<'a, 'b, 'c> for Function<'a, 'b, 'c, A, R, F>
-where
-    F: FnOnce<A, Output = R>,
-{
-    fn logging_preferences(&self) -> &LoggingPreferences<'a> {
-        &self.logging_preferences
-    }
-
-    fn logging_data(&self) -> &LoggingData<'b, 'c> {
-        &self.logging_data
-    }
-}
-
-#[cfg(not(feature = "async"))]
-#[cfg(not(feature = "logging"))]
-impl<A, R, F> Runnable for Function<A, R, F>
-where
-    A: Send,
-    R: Send + Debug,
-    F: Send + FnOnce<A, Output = R>,
-{
-    fn run(&mut self) {
-        self.run_function();
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg(not(feature = "logging"))]
-#[async_trait]
-impl<A, R, F> Runnable for Function<A, R, F>
-where
-    A: Send,
-    R: Send + Debug,
-    F: Send + FnOnce<A, Output = R>,
-{
-    #[cfg(feature = "async")]
-    async fn run(&mut self) {
-        self.run_function();
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg(feature = "logging")]
-#[async_trait]
-impl<'a, 'b, 'c, A, R, F> Runnable for Function<'a, 'b, 'c, A, R, F>
-where
-    A: Send,
-    R: Send + Debug,
-    F: Send + FnOnce<A, Output = R>,
-{
-    async fn run(&mut self) {
-        self.run_function();
-        self.log_input();
-        if let Some(output) = &self.output {
-            match output {
-                Ok(output) => {
-                    self.logging_data.set_output(format!("{:?}", output));
-                }
-                Err(_error) => self.logging_data.set_output("Function/Closure panicked..."),
-            }
-        }
-        self.log_output();
-    }
-}
-
-#[cfg(not(feature = "async"))]
-#[cfg(feature = "logging")]
-impl<'a, 'b, 'c, A, R, F> Runnable for Function<'a, 'b, 'c, A, R, F>
-where
-    A: Send,
-    R: Send + Debug,
-    F: Send + FnOnce<A, Output = R>,
-{
-    fn run(&mut self) {
-        self.run_function();
-        self.log_input();
-        if let Some(output) = &self.output {
-            match output {
-                Ok(output) => {
-                    self.logging_data.set_output(format!("{:?}", output));
-                }
-                Err(_error) => self.logging_data.set_output("Function/Closure panicked..."),
-            }
-        }
-        self.log_output();
-    }
 }
 
 // TESTS
