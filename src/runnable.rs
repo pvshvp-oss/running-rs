@@ -23,24 +23,28 @@ pub struct Job {
 
 // TRAITS
 
-/** A trait that represents entities that can be executed (or run). This can include functions, closures, scripts, executable binaries, operating system commands (that can themselves be made up of pipes and redirections), or a set containing one or more of the above (referred to here as `Job`s)
+/// A trait that represents entities that can be executed (or run). This can
+/// include functions, closures, scripts, executable binaries, operating system
+/// commands (that can themselves be made up of pipes and redirections), or a
+/// set containing one or more of the above (referred to here as `Job`s)
+///
+/// The generic variable `R` refers to the return type whereas `E` refers to the
+/// error type.
 
-The generic variable `R` refers to the return type whereas `E` refers to the error type.
-*/
 #[async_trait]
-pub trait Runnable<S = AsyncKind> 
-where
-    S:SynchronyType  
-{
+pub trait AsyncRunnable {
     async fn run(&mut self);
-    // async fn output<T>(&mut self) -> T;
 }
 
-/** A trait that represents entities that can be executed (or run). This can include functions, closures, scripts, executable binaries, operating system commands (that can themselves be made up of pipes and redirections), or a set containing one or more of the above (referred to here as `Job`s)
-
-The generic variable `R` refers to the return type whereas `E` refers to the error type.
-*/
-pub trait Runnabl<S = BlockingKind> {
+/// A trait that represents entities that can be executed (or run). This can
+/// include functions, closures, scripts, executable binaries, operating system
+/// commands (that can themselves be made up of pipes and redirections), or a
+/// set containing one or more of the above (referred to here as `Job`s)
+///
+/// The generic variable `R` refers to the return type whereas `E` refers to the
+/// error type.
+pub trait Runnable
+{
     fn run(&mut self);
 }
 

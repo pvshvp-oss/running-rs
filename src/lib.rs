@@ -1,10 +1,9 @@
-// ENABLE LANGUAGE FEATURES
-
 #![feature(unboxed_closures)] // to switch from parenthetical notation to generics for `Fn*` traits
 #![feature(fn_traits)] // to use `call_once` and `call` methods on Fn* traits
 #![feature(trait_alias)] // to give simple names for sets of traits
-#![feature(min_specialization)] // for specialization of trait implementations
+#![feature(specialization)] // for specialization of trait implementations
 #![feature(stmt_expr_attributes)] // for selective evaluation of expressions based on attributes
+#![feature(exhaustive_patterns)]
 
 // CRATE LEVEL DOCUMENTATION
 
