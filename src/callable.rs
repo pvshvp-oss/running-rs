@@ -83,8 +83,8 @@ struct StoredCallable<
 > where
     F: FnOnce<A, Output = R>,
 {
-    atomic_callable: AtomicCallable,
-    
+    atomic_callable: AtomicCallable<A, R, F>,
+    output: 
 }
 
 /// A struct denoting a callable object, like a function, method, or a closure 
