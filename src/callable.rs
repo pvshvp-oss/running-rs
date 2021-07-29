@@ -16,7 +16,7 @@ struct CallableLoggingData {
 /// format specification may have the callable handle, its arguments, and
 /// arbitrary strings
 #[derive(Debug, Clone)]
-enum CallableLoggingFormatToken {
+pub enum CallableLoggingFormatToken {
     Handle,
     Arguments,
     ArbitraryString(String),
@@ -74,11 +74,12 @@ impl CallableLoggingFormat {
 
 /// Stores the minimum information needed define a callable
 #[derive(Debug, Clone, Copy)]
-struct AtomicCallable<
+pub struct AtomicCallable<
     A, // arguments as a tuple
     R, // return type
     F, // Fn trait (like Fn, FnOnce, and FnMut)
 > where
+    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     handle: Option<F>,    // the callable's handle
@@ -87,11 +88,12 @@ struct AtomicCallable<
 
 /// AtomicCallable with the output stored
 // #[derive(Debug, Clone)]
-struct StoredCallable<
+pub struct StoredCallable<
     A, // arguments as a tuple
     R, // return type
     F, // Fn trait (like Fn, FnOnce, and FnMut)
 > where
+    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     atomic_callable: AtomicCallable<A, R, F>,
@@ -101,6 +103,7 @@ struct StoredCallable<
 /// Make StoredCallable ergonomic by allowing access to the fields and methods of the inner AtomicCallable
 impl<A, R, F> Deref for StoredCallable<A, R, F>
 where
+    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     type Target = AtomicCallable<A, R, F>;
@@ -112,6 +115,7 @@ where
 
 impl<A, R, F> DerefMut for StoredCallable<A, R, F>
 where
+    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -127,6 +131,7 @@ pub struct Callable<
     R, // return type
     F, // Fn trait (like Fn, FnOnce, and FnMut)
 > where
+    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     stored_callable: StoredCallable<A, R, F>,
@@ -138,6 +143,7 @@ pub type Closure<A, R, F> = Callable<A, R, F>;
 
 impl<A, R, F> Callable<A, R, F> 
 where
+    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     pub fn new(self, handle: F) -> Self {
@@ -160,6 +166,7 @@ where
 
 impl<A, R, F> Deref for Callable<A, R, F> 
 where
+    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     type Target = StoredCallable<A, R, F>;
@@ -171,6 +178,7 @@ where
 
 impl<A, R, F> DerefMut for Callable<A, R, F> 
 where
+    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -187,7 +195,8 @@ pub struct LoggedCallable<
     R, // return type
     F, // Fn trait (like Fn, FnOnce, and FnMut)
 > where
-    F: FnOnce<A, Output = R>,
+    A: Clone,
+F: FnOnce<A, Output = R>,
 {
     stored_callable: StoredCallable<A, R, F>,
     task_id: usize,
@@ -201,6 +210,7 @@ pub type LoggedClosure<'a, A, R, F> = LoggedCallable<'a, A, R, F>;
 
 impl<'a, A, R, F> LoggedCallable<'a, A, R, F> 
 where
+    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     pub fn new<S: Into<String>>(self, handle: F, handle_string: S) -> Self {
@@ -234,6 +244,7 @@ where
 
 impl<'a, A, R, F> Deref for LoggedCallable<'a, A, R, F> 
 where
+    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     type Target = StoredCallable<A, R, F>;
@@ -245,6 +256,7 @@ where
 
 impl<'a, A, R, F> DerefMut for LoggedCallable<'a, A, R, F> 
 where
+    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -254,6 +266,7 @@ where
 
 impl<A, R, F> Runnable for Callable<A, R, F>
 where
+    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     default fn run(&mut self) {
@@ -265,31 +278,33 @@ where
     }
 }
 
-// impl<A, R, F> Runnable for Callable<A, R, F>
-// where
-//     F: Fn<A, Output = R>,
-// {
-//     fn run(&mut self) {
-//         self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-//             if let Some(arguments) = self.arguments {
-//                 self.handle.call(arguments);
-//             }
-//         })));
-//     }
-// }
-
 impl<A, R, F> Runnable for Callable<A, R, F>
 where
-    F: FnMut<A, Output = R>,
+A: Clone,
+    F: Fn<A, Output = R>,
 {
     fn run(&mut self) {
         self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-            let handle = self.handle.take().expect("Handle not provided...");
-            let arguments = self.arguments.take().expect("Arguments not provided or are not in the valid format...");
-            handle.call_mut(arguments)
+            let handle = self.handle.as_ref().expect("Handle not provided...");
+            let arguments = self.arguments.as_ref().expect("Arguments not provided or are not in the valid format...");
+            handle.call(arguments.clone())
         })));
     }
 }
+
+// impl<A, R, F> Runnable for Callable<A, R, F>
+// where
+//     A: Clone,
+//     F: FnMut<A, Output = R>,
+// {
+//     fn run(&mut self) {
+//         self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
+//             let mut handle = self.handle.as_mut().expect("Handle not provided...");
+//             let mut arguments = self.arguments.as_mut().expect("Arguments not provided or are not in the valid format...");
+//             handle.call_mut(*arguments)
+//         })));
+//     }
+// }
 
 // TESTS
 
