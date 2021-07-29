@@ -80,7 +80,8 @@ impl CallableLoggingFormat {
     }
 
     fn generate_log(&self, logging_data: &CallableLoggingData){
-
+        // TODO
+        todo!("")
     }
 }
 
