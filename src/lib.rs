@@ -3,7 +3,6 @@
 #![feature(trait_alias)] // to give simple names for sets of traits
 #![feature(specialization)] // for specialization of trait implementations
 #![feature(stmt_expr_attributes)] // for selective evaluation of expressions based on attributes
-#![feature(exhaustive_patterns)]
 
 //! `running` is a library for running *callables* (functions and closures), and
 //! *external commands* (programs, scripts, and operating system commands), or a
@@ -52,8 +51,7 @@ pub trait AsyncRunnable {
 ///
 /// The generic variable `R` refers to the return type whereas `E` refers to the
 /// error type.
-pub trait Runnable
-{
+pub trait Runnable{
     fn run(&mut self);
 }
 
