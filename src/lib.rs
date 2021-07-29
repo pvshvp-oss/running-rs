@@ -9,17 +9,13 @@
 //! *external commands* (programs, scripts, and operating system commands), or a
 //! set of them with optional live logging and optional asynchrony.
 
-// IMPORTS
-
 use std::any::Any;
-
-// DECLARE MODULES
+use std::sync::atomic::{AtomicUsize, Ordering};
+use async_trait::async_trait;
 
 mod callable; // for types and traits pertaining to the execution of functions and closures
 mod instruction; // for types and traits pertaining to the execution of programs, scripts, and operating system commands
 mod runnable; // for types and traits pertaining to the execution of a batch of callables and commands
-
-// CUSTOM TYPES
 
 /// A trait for a general error type
 pub trait GeneralErrorTrait = Any + Send;
@@ -31,26 +27,35 @@ pub type GeneralErrorType = Box<(dyn GeneralErrorTrait)>;
 /// A type representing a general return type
 pub type GeneralReturnType = Box<(dyn GeneralReturnTrait)>; // a generic return type
 
-/// A trait that is implemented by the types of logging supported (LoggedKind and UnLoggedKind)
-pub trait LoggingType {}
-/// An empty type to indicate that something is logged
-pub struct LoggedKind {}
-/// An empty type to indicate that something is not logged
-pub struct UnLoggedKind {}
+static TASK_ID_GENERATOR: AtomicUsize = AtomicUsize::new(0); // initialize the unique task ID generator
 
-/// A trait that is implemented by the types of synchrony supported (BlockingKind and AsyncKind)
-pub trait SynchronyType {}
-/// An empty type to indicate that something is blocking
-pub struct BlockingKind {}
-/// An empty type to indicate that something is asynchronous
-pub struct AsyncKind {}
+pub fn generate_task_id() -> usize {
+    TASK_ID_GENERATOR.fetch_add(1, Ordering::Relaxed)
+}
 
-// TRAIT IMPLEMENTATIONS
+/// A trait that represents entities that can be executed (or run). This can
+/// include functions, closures, scripts, executable binaries, operating system
+/// commands (that can themselves be made up of pipes and redirections), or a
+/// set containing one or more of the above (referred to here as `Job`s)
+///
+/// The generic variable `R` refers to the return type whereas `E` refers to the
+/// error type.
+#[async_trait]
+pub trait AsyncRunnable {
+    async fn run(&mut self);
+}
 
-impl LoggingType for LoggedKind {}
-impl LoggingType for UnLoggedKind {}
-impl SynchronyType for BlockingKind {}
-impl SynchronyType for AsyncKind {}
+/// A trait that represents entities that can be executed (or run). This can
+/// include functions, closures, scripts, executable binaries, operating system
+/// commands (that can themselves be made up of pipes and redirections), or a
+/// set containing one or more of the above (referred to here as `Job`s)
+///
+/// The generic variable `R` refers to the return type whereas `E` refers to the
+/// error type.
+pub trait Runnable
+{
+    fn run(&mut self);
+}
 
 #[cfg(test)]
 mod tests {
