@@ -5,8 +5,6 @@
 #![feature(stmt_expr_attributes)] // for selective evaluation of expressions based on attributes
 #![feature(exhaustive_patterns)]
 
-// CRATE LEVEL DOCUMENTATION
-
 //! `running` is a library for running *callables* (functions and closures), and
 //! *external commands* (programs, scripts, and operating system commands), or a
 //! set of them with optional live logging and optional asynchrony.
@@ -20,12 +18,6 @@ use std::any::Any;
 mod callable; // for types and traits pertaining to the execution of functions and closures
 mod instruction; // for types and traits pertaining to the execution of programs, scripts, and operating system commands
 mod runnable; // for types and traits pertaining to the execution of a batch of callables and commands
-
-// API FACADE
-
-pub use crate::callable::*; // export the types and traits in callable.rs for public use
-pub use crate::instruction::*; // export the types and traits in command.rs for public use
-pub use crate::runnable::*; // export the types and traits in task.rs for public use
 
 // CUSTOM TYPES
 
