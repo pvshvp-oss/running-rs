@@ -8,9 +8,9 @@
 //! *external commands* (programs, scripts, and operating system commands), or a
 //! set of them with optional live logging and optional asynchrony.
 
+use async_trait::async_trait;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use async_trait::async_trait;
 
 mod callable; // for types and traits pertaining to the execution of functions and closures
 mod instruction; // for types and traits pertaining to the execution of programs, scripts, and operating system commands
@@ -51,7 +51,7 @@ pub trait AsyncRunnable {
 ///
 /// The generic variable `R` refers to the return type whereas `E` refers to the
 /// error type.
-pub trait Runnable{
+pub trait Runnable {
     fn run(&mut self);
 }
 

@@ -1,8 +1,8 @@
-use crate::GeneralErrorType;
 use crate::generate_task_id;
+use crate::GeneralErrorType;
 use crate::Runnable;
+use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
-use std::fmt::{Display, Debug};
 use std::{panic, panic::AssertUnwindSafe};
 
 /// The logging data for a callable. Contains the string form of the callable's
@@ -27,7 +27,7 @@ pub enum CallableLoggingFormatToken {
 /// The logging format for a callable, in the format of an ordered list. Each
 /// item in the list is a `CallableLoggingFormatToken`
 #[derive(Debug, Clone)]
-pub struct CallableLoggingFormat{
+pub struct CallableLoggingFormat {
     logging_format: Vec<CallableLoggingFormatToken>,
 }
 
@@ -50,8 +50,8 @@ impl DerefMut for CallableLoggingFormat {
 impl CallableLoggingFormat {
     /// Create a new callable logging format with an empty list.
     pub fn new() -> Self {
-        CallableLoggingFormat{
-            logging_format: Vec::new()
+        CallableLoggingFormat {
+            logging_format: Vec::new(),
         }
     }
 
@@ -75,14 +75,27 @@ impl CallableLoggingFormat {
 
     /// Append an arbitrary string to the end of the format specification
     pub fn append_string<S: Into<String>>(mut self, given_string: S) -> Self {
-        self.logging_format.push(CallableLoggingFormatToken::ArbitraryString(given_string.into()));
+        self.logging_format
+            .push(CallableLoggingFormatToken::ArbitraryString(
+                given_string.into(),
+            ));
         return self;
     }
 
-    fn generate_log(&self, logging_data: &CallableLoggingData){
-        // TODO
-        todo!("")
-    }
+    // fn generate_log<R: Display>(&self, logging_data: &CallableLoggingData, output: Option<Result<R>>) -> String {
+    //     self.logging_format.iter().fold(
+    //         String::new(),
+    //         |accumulator_string, token| {
+    //             accumulator_string.push_str(
+    //                 match token {
+    //                     Handle => logging_data.handle,
+    //                     Arguments => logging_data.arguments,
+    //                     Output =>
+    //                 }
+    //             )
+    //         }
+    //     )
+    // }
 }
 
 /// Stores the minimum information needed define a callable
@@ -92,7 +105,6 @@ pub struct AtomicCallable<
     R, // return type
     F, // Fn trait (like Fn, FnOnce, and FnMut)
 > where
-    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     handle: Option<F>,    // the callable's handle
@@ -106,17 +118,15 @@ pub struct StoredCallable<
     R, // return type
     F, // Fn trait (like Fn, FnOnce, and FnMut)
 > where
-    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     atomic_callable: AtomicCallable<A, R, F>,
-    output: Option<Result<R,GeneralErrorType>>, 
+    output: Option<Result<R, GeneralErrorType>>,
 }
 
 /// Make StoredCallable ergonomic by allowing access to the fields and methods of the inner AtomicCallable
 impl<A, R, F> Deref for StoredCallable<A, R, F>
 where
-    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     type Target = AtomicCallable<A, R, F>;
@@ -128,7 +138,6 @@ where
 
 impl<A, R, F> DerefMut for StoredCallable<A, R, F>
 where
-    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -136,15 +145,14 @@ where
     }
 }
 
-/// A struct denoting a callable object, like a function, method, or a closure 
-/// that implements one of Fn, FnOnce or FnMut. 
+/// A struct denoting a callable object, like a function, method, or a closure
+/// that implements one of Fn, FnOnce or FnMut.
 // #[derive(Debug, Clone)]
 pub struct Callable<
     A, // arguments as a tuple
     R, // return type
     F, // Fn trait (like Fn, FnOnce, and FnMut)
 > where
-    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     stored_callable: StoredCallable<A, R, F>,
@@ -154,9 +162,8 @@ pub type Function<A, R, F> = Callable<A, R, F>;
 pub type Method<A, R, F> = Callable<A, R, F>;
 pub type Closure<A, R, F> = Callable<A, R, F>;
 
-impl<A, R, F> Callable<A, R, F> 
+impl<A, R, F> Callable<A, R, F>
 where
-    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     pub fn new(self, handle: F) -> Self {
@@ -166,9 +173,9 @@ where
                     handle: Some(handle),
                     arguments: None,
                 },
-                output: None
-            }
-        }
+                output: None,
+            },
+        };
     }
 
     pub fn args(mut self, arguments: A) -> Self {
@@ -177,9 +184,8 @@ where
     }
 }
 
-impl<A, R, F> Deref for Callable<A, R, F> 
+impl<A, R, F> Deref for Callable<A, R, F>
 where
-    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     type Target = StoredCallable<A, R, F>;
@@ -189,9 +195,8 @@ where
     }
 }
 
-impl<A, R, F> DerefMut for Callable<A, R, F> 
+impl<A, R, F> DerefMut for Callable<A, R, F>
 where
-    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -201,13 +206,18 @@ where
 
 impl<A, R, F> Runnable for Callable<A, R, F>
 where
-    A: Clone,
     F: FnOnce<A, Output = R>,
 {
     default fn run(&mut self) {
         self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-            let handle = self.handle.take().expect("Handle not provided...");
-            let arguments = self.arguments.take().expect("Arguments not provided or are not in the valid format...");
+            let arguments = self
+                .arguments
+                .take()
+                .expect("Arguments not provided or are not in the valid format...");
+            let handle = self
+                .handle
+                .take()
+                .expect("Handle not provided or is moved...");
             handle.call_once(arguments)
         })));
     }
@@ -215,42 +225,51 @@ where
 
 impl<A, R, F> Runnable for Callable<A, R, F>
 where
-    A: Clone,
-    F: Fn<A, Output = R>,
+    F: FnMut<A, Output = R>,
 {
-    fn run(&mut self) {
+    default fn run(&mut self) {
         self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-            let handle = self.handle.as_ref().expect("Handle not provided...");
-            let arguments = self.arguments.as_ref().expect("Arguments not provided or are not in the valid format...");
-            handle.call(arguments.clone())
+            let arguments = self
+                .arguments
+                .take()
+                .expect("Arguments not provided or are not in the valid format...");
+            let handle = self
+                .handle
+                .as_mut()
+                .expect("Handle not provided or is moved...");
+            handle.call_mut(arguments)
         })));
     }
 }
 
-// impl<A, R, F> Runnable for Callable<A, R, F>
-// where
-//     A: Clone,
-//     F: FnMut<A, Output = R>,
-// {
-//     fn run(&mut self) {
-//         self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-//             let mut handle = self.handle.as_mut().expect("Handle not provided...");
-//             let mut arguments = self.arguments.as_mut().expect("Arguments not provided or are not in the valid format...");
-//             handle.call_mut(*arguments)
-//         })));
-//     }
-// }
+impl<A, R, F> Runnable for Callable<A, R, F>
+where
+    F: Fn<A, Output = R>,
+{
+    fn run(&mut self) {
+        self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
+            let arguments = self
+                .arguments
+                .take()
+                .expect("Arguments not provided or are not in the valid format...");
+            let handle = self
+                .handle
+                .as_mut()
+                .expect("Handle not provided or is moved...");
+            handle.call(arguments)
+        })));
+    }
+}
 
-/// A struct denoting a logged callable object, like a function, method, or a closure 
-/// that implements one of Fn, FnOnce or FnMut. 
+/// A struct denoting a logged callable object, like a function, method, or a closure
+/// that implements one of Fn, FnOnce or FnMut.
 // #[derive(Debug, Clone)]
 pub struct LoggedCallable<
-    'a, // the lifetime specifier of the logging format
-    A, // arguments as a tuple
-    R, // return type
-    F, // Fn trait (like Fn, FnOnce, and FnMut)
+    'a, // the lifetime specifier of the logging format,
+    A,  // arguments as a tuple
+    R,  // return type
+    F,  // Fn trait (like Fn, FnOnce, and FnMut)
 > where
-    A: Clone,
     R: Display,
     F: FnOnce<A, Output = R>,
 {
@@ -264,9 +283,8 @@ pub type LoggedFunction<'a, A, R, F> = LoggedCallable<'a, A, R, F>;
 pub type LoggedMethod<'a, A, R, F> = LoggedCallable<'a, A, R, F>;
 pub type LoggedClosure<'a, A, R, F> = LoggedCallable<'a, A, R, F>;
 
-impl<'a, A, R, F> LoggedCallable<'a, A, R, F> 
+impl<'a, A, R, F> LoggedCallable<'a, A, R, F>
 where
-    A: Clone,
     R: Display,
     F: FnOnce<A, Output = R>,
 {
@@ -277,31 +295,28 @@ where
                     handle: Some(handle),
                     arguments: None,
                 },
-                output: None
+                output: None,
             },
             task_id: generate_task_id(),
-            logging_data: Some(
-                CallableLoggingData {
-                    handle: handle_string.into(),
-                    arguments: String::new(),                  
-                }
-            ),
+            logging_data: Some(CallableLoggingData {
+                handle: handle_string.into(),
+                arguments: String::new(),
+            }),
             logging_format: None,
-        }
+        };
     }
 
     pub fn args<S: Into<String>>(mut self, arguments: A, arguments_string: S) -> Self {
         self.arguments = Some(arguments);
-        if let Some(mut logging_data_inner) = self.logging_data.as_mut(){
+        if let Some(mut logging_data_inner) = self.logging_data.as_mut() {
             logging_data_inner.arguments = arguments_string.into();
         }
         return self;
     }
 }
 
-impl<'a, A, R, F> Deref for LoggedCallable<'a, A, R, F> 
+impl<'a, A, R, F> Deref for LoggedCallable<'a, A, R, F>
 where
-    A: Clone,
     R: Display,
     F: FnOnce<A, Output = R>,
 {
@@ -312,9 +327,8 @@ where
     }
 }
 
-impl<'a, A, R, F> DerefMut for LoggedCallable<'a, A, R, F> 
+impl<'a, A, R, F> DerefMut for LoggedCallable<'a, A, R, F>
 where
-    A: Clone,
     R: Display,
     F: FnOnce<A, Output = R>,
 {
@@ -325,14 +339,19 @@ where
 
 impl<'a, A, R, F> Runnable for LoggedCallable<'a, A, R, F>
 where
-    A: Clone,
     R: Display,
     F: FnOnce<A, Output = R>,
 {
     default fn run(&mut self) {
         self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-            let handle = self.handle.take().expect("Handle not provided...");
-            let arguments = self.arguments.take().expect("Arguments not provided or are not in the valid format...");
+            let arguments = self
+                .arguments
+                .take()
+                .expect("Arguments not provided or are not in the valid format...");
+            let handle = self
+                .handle
+                .take()
+                .expect("Handle not provided or is moved...");
             handle.call_once(arguments)
         })));
     }
@@ -340,165 +359,176 @@ where
 
 impl<'a, A, R, F> Runnable for LoggedCallable<'a, A, R, F>
 where
-    A: Clone,
+    R: Display,
+    F: FnMut<A, Output = R>,
+{
+    default fn run(&mut self) {
+        self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
+            let arguments = self
+                .arguments
+                .take()
+                .expect("Arguments not provided or are not in the valid format...");
+            let handle = self
+                .handle
+                .as_mut()
+                .expect("Handle not provided or is moved...");
+            handle.call_mut(arguments)
+        })));
+    }
+}
+
+impl<'a, A, R, F> Runnable for LoggedCallable<'a, A, R, F>
+where
     R: Display,
     F: Fn<A, Output = R>,
 {
     fn run(&mut self) {
         self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-            let handle = self.handle.as_ref().expect("Handle not provided...");
-            let arguments = self.arguments.as_ref().expect("Arguments not provided or are not in the valid format...");
-            handle.call(arguments.clone())
+            let arguments = self
+                .arguments
+                .take()
+                .expect("Arguments not provided or are not in the valid format...");
+            let handle = self
+                .handle
+                .as_mut()
+                .expect("Handle not provided or is moved...");
+            handle.call(arguments)
         })));
     }
 }
 
-// impl<'a, A, R, F> Runnable for LoggedCallable<'a, A, R, F>
-// where
-//     A: Clone,
-//     F: FnMut<A, Output = R>,
-// {
-//     fn run(&mut self) {
-//         self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-//             let mut handle = self.handle.as_mut().expect("Handle not provided...");
-//             let mut arguments = self.arguments.as_mut().expect("Arguments not provided or are not in the valid format...");
-//             handle.call_mut(*arguments)
-//         })));
+// // TESTS
+
+// #[cfg(test)]
+// mod tests {
+
+//     // IMPORTS
+
+//     use crate::Runnable;
+
+//     use futures::executor::block_on;
+
+//     use crate::tests::setup_logging;
+
+//     // TESTS
+
+//     #[test]
+//     fn vector_pop() {
+//         setup_logging(log::LevelFilter::Debug);
+
+//         let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5, 6];
+//         let mut callable = callable!(vector.pop());
+//         let output: Option<isize>;
+
+//         #[cfg(feature = "async")]
+//         {
+//             block_on(callable.run());
+//             output = callable.output.unwrap().unwrap();
+//         }
+
+//         #[cfg(not(feature = "async"))]
+//         {
+//             callable.run();
+//             output = callable.output.unwrap().unwrap();
+//         }
+
+//         println!("vector_pop() output: {:?}", output);
+//         assert_eq!(output, Some(6));
+//         assert_eq!(vector, [1, 2, 3, 4, 5]);
+//     }
+
+//     #[test]
+//     fn vector_push() {
+//         #[cfg(feature = "logging")]
+//         setup_logging(log::LevelFilter::Debug);
+
+//         let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5];
+//         let mut callable = callable!(vector.push(7));
+//         let output: ();
+
+//         #[cfg(feature = "async")]
+//         {
+//             block_on(callable.run());
+//             output = callable.output.unwrap().unwrap();
+//         }
+
+//         #[cfg(not(feature = "async"))]
+//         {
+//             callable.run();
+//             output = callable.output.unwrap().unwrap();
+//         }
+
+//         println!("vector_push() output: {:?}", output);
+//         assert_eq!(output, ());
+//         assert_eq!(vector, [1, 2, 3, 4, 5, 7]);
+//     }
+
+//     #[test]
+//     fn vector_pop_and_push() {
+//         #[cfg(feature = "logging")]
+//         setup_logging(log::LevelFilter::Debug);
+
+//         let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5, 6];
+//         let mut callable = callable!(vector.pop());
+//         let output: Option<isize>;
+
+//         #[cfg(feature = "async")]
+//         {
+//             block_on(callable.run());
+//             output = callable.output.unwrap().unwrap();
+//         }
+
+//         #[cfg(not(feature = "async"))]
+//         {
+//             callable.run();
+//             output = callable.output.unwrap().unwrap();
+//         }
+
+//         println!("vector_pop() output: {:?}", output);
+//         assert_eq!(output, Some(6));
+//         assert_eq!(vector, [1, 2, 3, 4, 5]);
+
+//         let mut callable = callable!(vector.push(7));
+//         let output: ();
+
+//         #[cfg(feature = "async")]
+//         {
+//             block_on(callable.run());
+//             output = callable.output.unwrap().unwrap();
+//         }
+
+//         #[cfg(not(feature = "async"))]
+//         {
+//             callable.run();
+//             output = callable.output.unwrap().unwrap();
+//         }
+
+//         println!("vector_push() output: {:?}", output);
+//         assert_eq!(output, ());
+//         assert_eq!(vector, [1, 2, 3, 4, 5, 7]);
+//     }
+
+//     #[test]
+//     #[should_panic]
+//     fn panic() {
+//         let panicking_closure = || {
+//             panic!("Panicking test...");
+//         };
+//         let mut callable = callable!(panicking_closure());
+
+//         #[cfg(feature = "async")]
+//         block_on(callable.run());
+
+//         #[cfg(not(feature = "async"))]
+//         callable.run();
+
+//         callable.output.unwrap().unwrap();
+//     }
+
+//     #[test]
+//     #[cfg(feature = "logging")]
+//     fn try_string_from() {
+//         let value: isize = 5;
+//         assert_eq!(String::from("5"), crate::try_string_from(&value).unwrap())
 //     }
 // }
-
-// TESTS
-
-#[cfg(test)]
-mod tests {
-
-    // IMPORTS
-
-    use crate::Runnable;
-
-    use futures::executor::block_on;
-
-    use crate::tests::setup_logging;
-
-    // TESTS
-
-    #[test]
-    fn vector_pop() {
-        setup_logging(log::LevelFilter::Debug);
-
-        let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5, 6];
-        let mut callable = callable!(vector.pop());
-        let output: Option<isize>;
-
-        #[cfg(feature = "async")]
-        {
-            block_on(callable.run());
-            output = callable.output.unwrap().unwrap();
-        }
-
-        #[cfg(not(feature = "async"))]
-        {
-            callable.run();
-            output = callable.output.unwrap().unwrap();
-        }
-
-        println!("vector_pop() output: {:?}", output);
-        assert_eq!(output, Some(6));
-        assert_eq!(vector, [1, 2, 3, 4, 5]);
-    }
-
-    #[test]
-    fn vector_push() {
-        #[cfg(feature = "logging")]
-        setup_logging(log::LevelFilter::Debug);
-
-        let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5];
-        let mut callable = callable!(vector.push(7));
-        let output: ();
-
-        #[cfg(feature = "async")]
-        {
-            block_on(callable.run());
-            output = callable.output.unwrap().unwrap();
-        }
-
-        #[cfg(not(feature = "async"))]
-        {
-            callable.run();
-            output = callable.output.unwrap().unwrap();
-        }
-
-        println!("vector_push() output: {:?}", output);
-        assert_eq!(output, ());
-        assert_eq!(vector, [1, 2, 3, 4, 5, 7]);
-    }
-
-    #[test]
-    fn vector_pop_and_push() {
-        #[cfg(feature = "logging")]
-        setup_logging(log::LevelFilter::Debug);
-
-        let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5, 6];
-        let mut callable = callable!(vector.pop());
-        let output: Option<isize>;
-
-        #[cfg(feature = "async")]
-        {
-            block_on(callable.run());
-            output = callable.output.unwrap().unwrap();
-        }
-
-        #[cfg(not(feature = "async"))]
-        {
-            callable.run();
-            output = callable.output.unwrap().unwrap();
-        }
-
-        println!("vector_pop() output: {:?}", output);
-        assert_eq!(output, Some(6));
-        assert_eq!(vector, [1, 2, 3, 4, 5]);
-
-        let mut callable = callable!(vector.push(7));
-        let output: ();
-
-        #[cfg(feature = "async")]
-        {
-            block_on(callable.run());
-            output = callable.output.unwrap().unwrap();
-        }
-
-        #[cfg(not(feature = "async"))]
-        {
-            callable.run();
-            output = callable.output.unwrap().unwrap();
-        }
-
-        println!("vector_push() output: {:?}", output);
-        assert_eq!(output, ());
-        assert_eq!(vector, [1, 2, 3, 4, 5, 7]);
-    }
-
-    #[test]
-    #[should_panic]
-    fn panic() {
-        let panicking_closure = || {
-            panic!("Panicking test...");
-        };
-        let mut callable = callable!(panicking_closure());
-
-        #[cfg(feature = "async")]
-        block_on(callable.run());
-
-        #[cfg(not(feature = "async"))]
-        callable.run();
-
-        callable.output.unwrap().unwrap();
-    }
-
-    #[test]
-    #[cfg(feature = "logging")]
-    fn try_string_from() {
-        let value: isize = 5;
-        assert_eq!(String::from("5"), crate::try_string_from(&value).unwrap())
-    }
-}
