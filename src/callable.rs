@@ -50,9 +50,7 @@ impl DerefMut for CallableLoggingFormat {
 impl CallableLoggingFormat {
     /// Create a new callable logging format with an empty list.
     pub fn new() -> Self {
-        CallableLoggingFormat {
-            logging_format: Vec::new(),
-        }
+        CallableLoggingFormat { logging_format: Vec::new() }
     }
 
     /// Append the callable's handle to end of the format specification
@@ -75,16 +73,13 @@ impl CallableLoggingFormat {
 
     /// Append an arbitrary string to the end of the format specification
     pub fn append_string<S: Into<String>>(mut self, given_string: S) -> Self {
-        self.logging_format
-            .push(CallableLoggingFormatToken::ArbitraryString(
-                given_string.into(),
-            ));
+        self.logging_format.push(CallableLoggingFormatToken::ArbitraryString(given_string.into()));
         return self;
     }
 
-    // fn generate_log<R: Display>(&self, logging_data: &CallableLoggingData, output: Option<Result<R>>) -> String {
-    //     self.logging_format.iter().fold(
-    //         String::new(),
+    // fn generate_log<R: Display>(&self, logging_data: &CallableLoggingData,
+    // output: Option<Result<R>>) -> String {     self.logging_format.iter().
+    // fold(         String::new(),
     //         |accumulator_string, token| {
     //             accumulator_string.push_str(
     //                 match token {
@@ -124,7 +119,8 @@ pub struct StoredCallable<
     output: Option<Result<R, GeneralErrorType>>,
 }
 
-/// Make StoredCallable ergonomic by allowing access to the fields and methods of the inner AtomicCallable
+/// Make StoredCallable ergonomic by allowing access to the fields and methods
+/// of the inner AtomicCallable
 impl<A, R, F> Deref for StoredCallable<A, R, F>
 where
     F: FnOnce<A, Output = R>,
@@ -169,10 +165,7 @@ where
     pub fn new(self, handle: F) -> Self {
         return Callable {
             stored_callable: StoredCallable {
-                atomic_callable: AtomicCallable {
-                    handle: Some(handle),
-                    arguments: None,
-                },
+                atomic_callable: AtomicCallable { handle: Some(handle), arguments: None },
                 output: None,
             },
         };
@@ -214,10 +207,7 @@ where
                 .arguments
                 .take()
                 .expect("Arguments not provided or are not in the valid format...");
-            let handle = self
-                .handle
-                .take()
-                .expect("Handle not provided or is moved...");
+            let handle = self.handle.take().expect("Handle not provided or is moved...");
             handle.call_once(arguments)
         })));
     }
@@ -233,10 +223,7 @@ where
                 .arguments
                 .take()
                 .expect("Arguments not provided or are not in the valid format...");
-            let handle = self
-                .handle
-                .as_mut()
-                .expect("Handle not provided or is moved...");
+            let handle = self.handle.as_mut().expect("Handle not provided or is moved...");
             handle.call_mut(arguments)
         })));
     }
@@ -252,17 +239,14 @@ where
                 .arguments
                 .take()
                 .expect("Arguments not provided or are not in the valid format...");
-            let handle = self
-                .handle
-                .as_mut()
-                .expect("Handle not provided or is moved...");
+            let handle = self.handle.as_mut().expect("Handle not provided or is moved...");
             handle.call(arguments)
         })));
     }
 }
 
-/// A struct denoting a logged callable object, like a function, method, or a closure
-/// that implements one of Fn, FnOnce or FnMut.
+/// A struct denoting a logged callable object, like a function, method, or a
+/// closure that implements one of Fn, FnOnce or FnMut.
 // #[derive(Debug, Clone)]
 pub struct LoggedCallable<
     'a, // the lifetime specifier of the logging format,
@@ -291,10 +275,7 @@ where
     pub fn new<S: Into<String>>(self, handle: F, handle_string: S) -> Self {
         return LoggedCallable {
             stored_callable: StoredCallable {
-                atomic_callable: AtomicCallable {
-                    handle: Some(handle),
-                    arguments: None,
-                },
+                atomic_callable: AtomicCallable { handle: Some(handle), arguments: None },
                 output: None,
             },
             task_id: generate_task_id(),
@@ -348,10 +329,7 @@ where
                 .arguments
                 .take()
                 .expect("Arguments not provided or are not in the valid format...");
-            let handle = self
-                .handle
-                .take()
-                .expect("Handle not provided or is moved...");
+            let handle = self.handle.take().expect("Handle not provided or is moved...");
             handle.call_once(arguments)
         })));
     }
@@ -368,10 +346,7 @@ where
                 .arguments
                 .take()
                 .expect("Arguments not provided or are not in the valid format...");
-            let handle = self
-                .handle
-                .as_mut()
-                .expect("Handle not provided or is moved...");
+            let handle = self.handle.as_mut().expect("Handle not provided or is moved...");
             handle.call_mut(arguments)
         })));
     }
@@ -388,10 +363,7 @@ where
                 .arguments
                 .take()
                 .expect("Arguments not provided or are not in the valid format...");
-            let handle = self
-                .handle
-                .as_mut()
-                .expect("Handle not provided or is moved...");
+            let handle = self.handle.as_mut().expect("Handle not provided or is moved...");
             handle.call(arguments)
         })));
     }
@@ -529,6 +501,6 @@ where
 //     #[cfg(feature = "logging")]
 //     fn try_string_from() {
 //         let value: isize = 5;
-//         assert_eq!(String::from("5"), crate::try_string_from(&value).unwrap())
-//     }
+//         assert_eq!(String::from("5"),
+// crate::try_string_from(&value).unwrap())     }
 // }
