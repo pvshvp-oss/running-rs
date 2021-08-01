@@ -141,6 +141,19 @@ where
     }
 }
 
+/// A trait that exists solely to specialize the implementation of `new` and
+/// `args` methods in `Callable` for the case of no arguments
+pub trait CallableCreate<
+    A, // arguments as a tuple
+    R, // return type
+    F, // Fn trait (like Fn, FnOnce, and FnMut)
+> where
+    F: FnOnce<A, Output = R>,
+{
+    fn new(self: Self, handle: F) -> Self;
+    fn args(self: Self, arguments: A) -> Self;
+}
+
 /// A struct denoting a callable object, like a function, method, or a closure
 /// that implements one of Fn, FnOnce or FnMut.
 // #[derive(Debug, Clone)]
@@ -158,11 +171,11 @@ pub type Function<A, R, F> = Callable<A, R, F>;
 pub type Method<A, R, F> = Callable<A, R, F>;
 pub type Closure<A, R, F> = Callable<A, R, F>;
 
-impl<A, R, F> Callable<A, R, F>
+impl<A, R, F> CallableCreate<A, R, F> for Callable<A, R, F>
 where
     F: FnOnce<A, Output = R>,
 {
-    pub fn new(self, handle: F) -> Self {
+    default fn new(self, handle: F) -> Self {
         return Callable {
             stored_callable: StoredCallable {
                 atomic_callable: AtomicCallable { handle: Some(handle), arguments: None },
@@ -171,7 +184,26 @@ where
         };
     }
 
-    pub fn args(mut self, arguments: A) -> Self {
+    default fn args(mut self, arguments: A) -> Self {
+        self.arguments = Some(arguments);
+        return self;
+    }
+}
+
+impl<R, F> CallableCreate<(), R, F> for Callable<(), R, F>
+where
+    F: FnOnce<(), Output = R>,
+{
+    fn new(self, handle: F) -> Self {
+        return Callable {
+            stored_callable: StoredCallable {
+                atomic_callable: AtomicCallable { handle: Some(handle), arguments: Some(()) },
+                output: None,
+            },
+        };
+    }
+
+    fn args(mut self, arguments: ()) -> Self {
         self.arguments = Some(arguments);
         return self;
     }
@@ -245,6 +277,19 @@ where
     }
 }
 
+/// A trait that exists solely to specialize the implementation of `new` and
+/// `args` methods in `LoggedCallable` for the case of no arguments
+pub trait LoggedCallableCreate<
+    A, // arguments as a tuple
+    R, // return type
+    F, // Fn trait (like Fn, FnOnce, and FnMut)
+> where
+    F: FnOnce<A, Output = R>,
+{
+    fn new<S: Into<String>>(self: Self, handle: F, handle_string: S) -> Self;
+    fn args<S: Into<String>>(self: Self, arguments: A, arguments_string: S) -> Self;
+}
+
 /// A struct denoting a logged callable object, like a function, method, or a
 /// closure that implements one of Fn, FnOnce or FnMut.
 // #[derive(Debug, Clone)]
@@ -267,12 +312,12 @@ pub type LoggedFunction<'a, A, R, F> = LoggedCallable<'a, A, R, F>;
 pub type LoggedMethod<'a, A, R, F> = LoggedCallable<'a, A, R, F>;
 pub type LoggedClosure<'a, A, R, F> = LoggedCallable<'a, A, R, F>;
 
-impl<'a, A, R, F> LoggedCallable<'a, A, R, F>
+impl<'a, A, R, F> LoggedCallableCreate<A, R, F> for LoggedCallable<'a, A, R, F>
 where
     R: Display,
     F: FnOnce<A, Output = R>,
 {
-    pub fn new<S: Into<String>>(self, handle: F, handle_string: S) -> Self {
+    default fn new<S: Into<String>>(self, handle: F, handle_string: S) -> Self {
         return LoggedCallable {
             stored_callable: StoredCallable {
                 atomic_callable: AtomicCallable { handle: Some(handle), arguments: None },
@@ -287,7 +332,36 @@ where
         };
     }
 
-    pub fn args<S: Into<String>>(mut self, arguments: A, arguments_string: S) -> Self {
+    default fn args<S: Into<String>>(mut self, arguments: A, arguments_string: S) -> Self {
+        self.arguments = Some(arguments);
+        if let Some(mut logging_data_inner) = self.logging_data.as_mut() {
+            logging_data_inner.arguments = arguments_string.into();
+        }
+        return self;
+    }
+}
+
+impl<'a, R, F> LoggedCallableCreate<(), R, F> for LoggedCallable<'a, (), R, F>
+where
+    R: Display,
+    F: FnOnce<(), Output = R>,
+{
+    fn new<S: Into<String>>(self, handle: F, handle_string: S) -> Self {
+        return LoggedCallable {
+            stored_callable: StoredCallable {
+                atomic_callable: AtomicCallable { handle: Some(handle), arguments: Some(()) },
+                output: None,
+            },
+            task_id: generate_task_id(),
+            logging_data: Some(CallableLoggingData {
+                handle: handle_string.into(),
+                arguments: String::from("()"),
+            }),
+            logging_format: None,
+        };
+    }
+
+    fn args<S: Into<String>>(mut self, arguments: (), arguments_string: S) -> Self {
         self.arguments = Some(arguments);
         if let Some(mut logging_data_inner) = self.logging_data.as_mut() {
             logging_data_inner.arguments = arguments_string.into();
