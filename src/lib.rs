@@ -9,22 +9,11 @@
 //! set of them with optional live logging and optional asynchrony.
 
 use async_trait::async_trait;
-use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 mod callable; // for types and traits pertaining to the execution of functions and closures
 mod instruction; // for types and traits pertaining to the execution of programs, scripts, and operating system commands
 mod runnable; // for types and traits pertaining to the execution of a batch of callables and commands
-
-/// A trait for a general error type
-pub trait GeneralErrorTrait = Any + Send;
-/// A trait for a genera return type
-pub trait GeneralReturnTrait = Any + Send;
-
-/// A type representing a general error type
-pub type GeneralErrorType = Box<(dyn GeneralErrorTrait)>;
-/// A type representing a general return type
-pub type GeneralReturnType = Box<(dyn GeneralReturnTrait)>; // a generic return type
 
 static TASK_ID_GENERATOR: AtomicUsize = AtomicUsize::new(0); // initialize the unique task ID generator
 
