@@ -283,17 +283,16 @@ where
     F: FnOnce<A, Output = R>,
 {
     default fn run(&mut self) -> Result<(), Error> {
-        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<(), CallableError> {
+        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
             let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
             let handle: F = self.handle.take().context(CallableHandleMissing)?;
-            handle.call_once(arguments);
-            Ok(())
+            Ok(handle.call_once(arguments))
         }));
         let output = match output {
             Ok(inner) => inner,
             Err(_inner) => CallablePanicked.fail().into(),
         };
-        output.map_err(|error: CallableError| -> Error { error.into() })
+        output.map_err(|error: CallableError| -> Error { error.into() }).map(|_inner| ())
     }
 }
 
@@ -302,17 +301,16 @@ where
     F: FnMut<A, Output = R>,
 {
     default fn run(&mut self) -> Result<(), Error> {
-        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<(), CallableError> {
+        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
             let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
             let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
-            handle.call_mut(arguments);
-            Ok(())
+            Ok(handle.call_mut(arguments))
         }));
         let output = match output {
             Ok(inner) => inner,
             Err(_inner) => CallablePanicked.fail().into(),
         };
-        output.map_err(|error| -> Error { error.into() })
+        output.map_err(|error| -> Error { error.into() }).map(|_inner| ())
     }
 }
 
@@ -321,17 +319,16 @@ where
     F: Fn<A, Output = R>,
 {
     fn run(&mut self) -> Result<(), Error> {
-        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<(), CallableError> {
+        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
             let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
             let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
-            handle.call(arguments);
-            Ok(())
+            Ok(handle.call(arguments))
         }));
         let output = match output {
             Ok(inner) => inner,
             Err(_inner) => CallablePanicked.fail().into(),
         };
-        output.map_err(|error| -> Error { error.into() })
+        output.map_err(|error| -> Error { error.into() }).map(|_inner| ())
     }
 }
 
@@ -391,6 +388,12 @@ pub trait LoggedCallableCreate<
 {
     fn new<S: Into<String>>(self: Self, handle: F, handle_string: S) -> Self;
     fn args<S: Into<String>>(self: Self, arguments: A, arguments_string: S) -> Self;
+}
+
+/// A trait that exists solely to specialize the display of the callable output
+/// when the return type implements Debug or Display
+trait CallableOutputString<R> {
+    fn get_output_string(&self, callable_output: &R) -> String;
 }
 
 /// A struct denoting a logged callable object, like a function, method, or a
@@ -503,152 +506,191 @@ where
                 return accumulator_string.map(|mut inner| {
                     inner.push_str(intermediate_string);
                     inner
-                } );
+                });
             },
         )
     }
 }
 
-// impl<'a, A, R, F> LoggedCallableLog for LoggedCallable<'a, A, R, F>
-// where
-//     F: FnOnce<A, Output = R>,
-// {
-//     default fn generate_log(&self) -> String {
-//         if let Some(logging_format) = self.logging_format {
-//             // let return_string: String;
-//             logging_format.iter().fold(String::new(), |mut
-// accumulator_string, token| {
-// accumulator_string.push_str(match token {
-// LoggingFormatToken::Handle => {                         if let
-// Some(logging_data) = self.logging_data.as_ref() {
-// &logging_data.handle                         } else {
-//                             "N.A."
-//                         }
-//                     }
-//                     LoggingFormatToken::Arguments => {
-//                         if let Some(logging_data) =
-// self.logging_data.as_ref() {
-// &logging_data.arguments                         } else {
-//                             "N.A."
-//                         }
-//                     }
-//                     LoggingFormatToken::ArbitraryString(arbitrary_string) =>
-// arbitrary_string,                     LoggingFormatToken::Output => {
-//                         if let Some(output) = self.output.as_ref() {
-//                             match output {
-//                                 Ok(_return_value) => {
-//                                     // return_string =
-// format!("{:?}",return_value);                                     //
-// &return_string                                     "N.A."
-//                                 }
-//                                 Err(_error) => "N.A.",
-//                             }
-//                         } else {
-//                             "N.A."
-//                         }
-//                     }
-//                 });
-//                 return accumulator_string;
-//             })
-//         } else {
-//             String::from("N.A.")
-//         }
-//     }
-// }
+impl<'a, A, R, F> CallableOutputString<R> for LoggedCallable<'a, A, R, F>
+where
+    F: FnOnce<A, Output = R>,
+{
+    default fn get_output_string(&self, callable_output: &R) -> String {
+        return format!("");
+    }
+}
 
-// impl<'a, A, R, F> LoggedCallableLog for LoggedCallable<'a, A, R, F>
-// where
-//     R: Debug,
-//     F: FnOnce<A, Output = R>,
-// {
-//     default fn generate_log(&self) -> String {
-//         if let Some(logging_format) = self.logging_format {
-//             logging_format.iter().fold(String::new(), |mut
-// accumulator_string, token| {                 let return_string: String;
-//                 accumulator_string.push_str(match token {
-//                     LoggingFormatToken::Handle => {
-//                         if let Some(logging_data) =
-// self.logging_data.as_ref() {                             &logging_data.handle
-//                         } else {
-//                             "N.A."
-//                         }
-//                     }
-//                     LoggingFormatToken::Arguments => {
-//                         if let Some(logging_data) =
-// self.logging_data.as_ref() {
-// &logging_data.arguments                         } else {
-//                             "N.A."
-//                         }
-//                     }
-//                     LoggingFormatToken::ArbitraryString(arbitrary_string) =>
-// arbitrary_string,                     LoggingFormatToken::Output => {
-//                         if let Some(output) = self.output.as_ref() {
-//                             match output {
-//                                 Ok(return_value) => {
-//                                     return_string = format!("{:?}",
-// return_value);                                     &return_string
-//                                 }
-//                                 Err(_error) => "N.A.",
-//                             }
-//                         } else {
-//                             "N.A."
-//                         }
-//                     }
-//                 });
-//                 return accumulator_string;
-//             })
-//         } else {
-//             String::from("N.A.")
-//         }
-//     }
-// }
+impl<'a, A, R, F> CallableOutputString<R> for LoggedCallable<'a, A, R, F>
+where
+    R: Debug,
+    F: FnOnce<A, Output = R>,
+{
+    default fn get_output_string(&self, callable_output: &R) -> String {
+        return format!("{:?}", callable_output);
+    }
+}
 
-// impl<'a, A, R, F> LoggedCallableLog for LoggedCallable<'a, A, R, F>
-// where
-//     R: Display + Debug,
-//     F: FnOnce<A, Output = R>,
-// {
-//     fn generate_log(&self) -> String {
-//         if let Some(logging_format) = self.logging_format {
-//             logging_format.iter().fold(String::new(), |mut
-// accumulator_string, token| {                 let return_string: String;
-//                 accumulator_string.push_str(match token {
-//                     LoggingFormatToken::Handle => {
-//                         if let Some(logging_data) =
-// self.logging_data.as_ref() {                             &logging_data.handle
-//                         } else {
-//                             "N.A."
-//                         }
-//                     }
-//                     LoggingFormatToken::Arguments => {
-//                         if let Some(logging_data) =
-// self.logging_data.as_ref() {
-// &logging_data.arguments                         } else {
-//                             "N.A."
-//                         }
-//                     }
-//                     LoggingFormatToken::ArbitraryString(arbitrary_string) =>
-// arbitrary_string,                     LoggingFormatToken::Output => {
-//                         if let Some(output) = self.output.as_ref() {
-//                             match output {
-//                                 Ok(return_value) => {
-//                                     return_string = format!("{}",
-// return_value);                                     &return_string
-//                                 }
-//                                 Err(_error) => "N.A.",
-//                             }
-//                         } else {
-//                             "N.A."
-//                         }
-//                     }
-//                 });
-//                 return accumulator_string;
-//             })
-//         } else {
-//             String::from("N.A.")
-//         }
-//     }
-// }
+impl<'a, A, R, F> CallableOutputString<R> for LoggedCallable<'a, A, R, F>
+where
+    R: Display + Debug,
+    F: FnOnce<A, Output = R>,
+{
+    fn get_output_string(&self, callable_output: &R) -> String {
+        return format!("{:?}", callable_output);
+    }
+}
+
+impl<'a, A, R, F> RunAndReturn for LoggedCallable<'a, A, R, F>
+where
+    F: FnOnce<A, Output = R>,
+{
+    type ReturnType = R;
+
+    default fn run_and_return(&mut self) -> Result<Self::ReturnType, Error> {
+        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
+            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
+            let handle: F = self.handle.take().context(CallableHandleMissing)?;
+            Ok(handle.call_once(arguments))
+        }));
+        let output = match output {
+            Ok(inner) => inner,
+            Err(_inner) => CallablePanicked.fail().into(),
+        };
+        output.map_err(|error: CallableError| -> Error { error.into() })
+    }
+}
+
+impl<'a, A, R, F> RunAndReturn for LoggedCallable<'a, A, R, F>
+where
+    F: FnMut<A, Output = R>,
+{
+    default fn run_and_return(&mut self) -> Result<Self::ReturnType, Error> {
+        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
+            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
+            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
+            Ok(handle.call_mut(arguments))
+        }));
+        let output = match output {
+            Ok(inner) => inner,
+            Err(_inner) => CallablePanicked.fail().into(),
+        };
+        output.map_err(|error| -> Error { error.into() })
+    }
+}
+
+impl<'a, A, R, F> RunAndReturn for LoggedCallable<'a, A, R, F>
+where
+    F: Fn<A, Output = R>,
+{
+    fn run_and_return(&mut self) -> Result<Self::ReturnType, Error> {
+        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
+            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
+            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
+            Ok(handle.call(arguments))
+        }));
+        let output = match output {
+            Ok(inner) => inner,
+            Err(_inner) => CallablePanicked.fail().into(),
+        };
+        output.map_err(|error| -> Error { error.into() })
+    }
+}
+
+impl<'a, A, R, F> Run for LoggedCallable<'a, A, R, F>
+where
+    F: FnOnce<A, Output = R>,
+{
+    default fn run(&mut self) -> Result<(), Error> {
+        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
+            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
+            let handle: F = self.handle.take().context(CallableHandleMissing)?;
+            Ok(handle.call_once(arguments))
+        }));
+        let output = match output {
+            Ok(inner) => inner,
+            Err(_inner) => CallablePanicked.fail().into(),
+        };
+        output.map_err(|error: CallableError| -> Error { error.into() }).map(|_inner| ())
+    }
+}
+
+impl<'a, A, R, F> Run for LoggedCallable<'a, A, R, F>
+where
+    F: FnMut<A, Output = R>,
+{
+    default fn run(&mut self) -> Result<(), Error> {
+        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
+            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
+            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
+            Ok(handle.call_mut(arguments))
+        }));
+        let output = match output {
+            Ok(inner) => inner,
+            Err(_inner) => CallablePanicked.fail().into(),
+        };
+        output.map_err(|error| -> Error { error.into() }).map(|_inner| ())
+    }
+}
+
+impl<'a, A, R, F> Run for LoggedCallable<'a, A, R, F>
+where
+    F: Fn<A, Output = R>,
+{
+    fn run(&mut self) -> Result<(), Error> {
+        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
+            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
+            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
+            Ok(handle.call(arguments))
+        }));
+        let output = match output {
+            Ok(inner) => inner,
+            Err(_inner) => CallablePanicked.fail().into(),
+        };
+        output.map_err(|error| -> Error { error.into() }).map(|_inner| ())
+    }
+}
+
+impl<'a, A, R, F> RunAndCallback for LoggedCallable<'a, A, R, F>
+where
+    F: FnOnce<A, Output = R>,
+{
+    fn run_and_then<C: FnOnce(Self::ReturnType) -> ()>(
+        &mut self,
+        callback: C,
+    ) -> Result<(), Error> {
+        match self.run_and_return() {
+            Ok(inner) => Ok(callback(inner)),
+            Err(inner) => Err(inner),
+        }
+    }
+}
+
+impl<'a, A, R, F> RunAndDebug for LoggedCallable<'a, A, R, F>
+where
+    R: Debug,
+    F: FnOnce<A, Output = R>,
+{
+    fn run_and_debug(&mut self) -> Result<String, Error> {
+        match self.run_and_return() {
+            Ok(inner) => Ok(format!("{:?}", inner)),
+            Err(inner) => Err(inner),
+        }
+    }
+}
+
+impl<'a, A, R, F> RunAndDisplay for LoggedCallable<'a, A, R, F>
+where
+    R: Display,
+    F: FnOnce<A, Output = R>,
+{
+    fn run_and_display(&mut self) -> Result<String, Error> {
+        match self.run_and_return() {
+            Ok(inner) => Ok(format!("{}", inner)),
+            Err(inner) => Err(inner),
+        }
+    }
+}
 
 // impl<'a, A, R, F> Runnable for LoggedCallable<'a, A, R, F>
 // where
