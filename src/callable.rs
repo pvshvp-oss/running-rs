@@ -1,85 +1,122 @@
+// region: IMPORTS
+
 use crate::generate_task_id;
-use crate::Runnable;
+use crate::Error;
+use crate::{Run, RunAndCallback, RunAndDebug, RunAndDisplay, RunAndReturn};
+use snafu::{ErrorCompat, ResultExt, Snafu, Backtrace, OptionExt};
 use std::any::Any;
 use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
 use std::{panic, panic::AssertUnwindSafe};
 
+// endregion: IMPORTS
+
+// region: ERRORS
+
+#[derive(Debug, Snafu)]
+pub enum CallableError {
+    // TODO: https://docs.rs/snafu/0.6.10/snafu/index.html
+    #[snafu(display("Callable handle missing. Either it was not provided, or was moved during a previous method call"))]
+    CallableHandleMissing {
+        backtrace: Backtrace
+    },
+    #[snafu(display("Callable arguments missing. Either they were not provided, or were moved during a previous method call"))]
+    CallableArgumentsMissing {
+        backtrace: Backtrace
+    },
+    #[snafu(display("Callable panicked"))]
+    CallablePanicked {
+        backtrace: Backtrace
+    }
+}
+
+// endregion: ERRORS
+
+// region: LOGGING INFO
+
 /// The logging data for a callable. Contains the string form of the callable's
 /// handle and the string form of its arguments
 #[derive(Debug, Clone)]
-struct CallableLoggingData {
+#[cfg_attr(feature = "serde_support", derive(Serialize, Deserialize))]
+struct LoggingData {
     handle: String,
     arguments: String,
 }
 
 /// Represents one token within the format specification of a callable. The
 /// format specification may have the callable handle, its arguments, and
-/// arbitrary strings
+/// arbitrary strings. Use the `new` and `append` methods to build up the format
 #[derive(Debug, Clone)]
-pub enum CallableLoggingFormatToken {
+#[cfg_attr(feature = "serde_support", derive(Serialize, Deserialize))]
+pub enum LoggingFormatToken {
     Handle,
-    Arguments,
+    Args,
     Output,
     ArbitraryString(String),
 }
 
 /// The logging format for a callable, in the format of an ordered list. Each
-/// item in the list is a `CallableLoggingFormatToken`
+/// item in the list is a [LoggingFormatToken]
 #[derive(Debug, Clone)]
-pub struct CallableLoggingFormat {
-    logging_format: Vec<CallableLoggingFormatToken>,
+#[cfg_attr(feature = "serde_support", derive(Serialize, Deserialize))]
+pub struct LoggingFormat {
+    logging_format: Vec<LoggingFormatToken>,
 }
 
-pub type CallableLoggingFormatBuilder = CallableLoggingFormat;
+pub type LoggingFormatBuilder = LoggingFormat;
 
-impl Deref for CallableLoggingFormat {
-    type Target = Vec<CallableLoggingFormatToken>;
+impl Deref for LoggingFormat {
+    type Target = Vec<LoggingFormatToken>;
 
     fn deref(&self) -> &Self::Target {
         return &self.logging_format;
     }
 }
 
-impl DerefMut for CallableLoggingFormat {
+impl DerefMut for LoggingFormat {
     fn deref_mut(&mut self) -> &mut Self::Target {
         return &mut self.logging_format;
     }
 }
 
-impl CallableLoggingFormat {
+impl LoggingFormat {
     /// Create a new callable logging format with an empty list.
     pub fn new() -> Self {
-        CallableLoggingFormat { logging_format: Vec::new() }
+        LoggingFormat { logging_format: Vec::new() }
     }
 
     /// Append the callable's handle to end of the format specification
     pub fn append_handle(mut self) -> Self {
-        self.push(CallableLoggingFormatToken::Handle);
+        self.push(LoggingFormatToken::Handle);
         return self;
     }
 
     /// Append the callable's arguments to the end of the format specification
-    pub fn append_arguments(mut self) -> Self {
-        self.push(CallableLoggingFormatToken::Arguments);
+    pub fn append_args(mut self) -> Self {
+        self.push(LoggingFormatToken::Args);
         return self;
     }
 
     /// Append the callable's output to the end of the format specification
     pub fn append_output(mut self) -> Self {
-        self.push(CallableLoggingFormatToken::Output);
+        self.push(LoggingFormatToken::Output);
         return self;
     }
 
     /// Append an arbitrary string to the end of the format specification
     pub fn append_string<S: Into<String>>(mut self, given_string: S) -> Self {
-        self.logging_format.push(CallableLoggingFormatToken::ArbitraryString(given_string.into()));
+        self.push(LoggingFormatToken::ArbitraryString(given_string.into()));
         return self;
     }
 }
 
+// endregion: LOGGING INFO
+
+// region: CALLABLE
+
 /// Stores the minimum information needed define a callable
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "serde_support", derive(Serialize, Deserialize))]
 pub struct AtomicCallable<
     A, // arguments as a tuple
     R, // return type
@@ -91,42 +128,7 @@ pub struct AtomicCallable<
     arguments: Option<A>, // a tuple representing the arguments
 }
 
-pub type CallableError = Box<(dyn Any + Send)>;
-
-/// AtomicCallable with the output stored
-// #[derive(Debug, Clone)]
-pub struct StoredCallable<
-    A, // arguments as a tuple
-    R, // return type
-    F, // Fn trait (like Fn, FnOnce, and FnMut)
-> where
-    F: FnOnce<A, Output = R>,
-{
-    atomic_callable: AtomicCallable<A, R, F>,
-    output: Option<Result<R, CallableError>>,
-}
-
-/// Make StoredCallable ergonomic by allowing access to the fields and methods
-/// of the inner AtomicCallable
-impl<A, R, F> Deref for StoredCallable<A, R, F>
-where
-    F: FnOnce<A, Output = R>,
-{
-    type Target = AtomicCallable<A, R, F>;
-
-    fn deref(&self) -> &Self::Target {
-        return &self.atomic_callable;
-    }
-}
-
-impl<A, R, F> DerefMut for StoredCallable<A, R, F>
-where
-    F: FnOnce<A, Output = R>,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        return &mut self.atomic_callable;
-    }
-}
+// pub type CallableError = Box<(dyn Any + Send)>;
 
 /// A trait that exists solely to specialize the implementation of `new` and
 /// `args` methods in `Callable` for the case of no arguments
@@ -151,42 +153,61 @@ pub struct Callable<
 > where
     F: FnOnce<A, Output = R>,
 {
-    stored_callable: StoredCallable<A, R, F>,
+    atomic_callable: AtomicCallable<A, R, F>,
 }
 
 pub type Function<A, R, F> = Callable<A, R, F>;
 pub type Method<A, R, F> = Callable<A, R, F>;
 pub type Closure<A, R, F> = Callable<A, R, F>;
 
+impl<A, R, F> Deref for Callable<A, R, F>
+where
+    F: FnOnce<A, Output = R>,
+{
+    type Target = AtomicCallable<A, R, F>;
+
+    fn deref(&self) -> &Self::Target {
+        return &self.atomic_callable;
+    }
+}
+
+impl<A, R, F> DerefMut for Callable<A, R, F>
+where
+    F: FnOnce<A, Output = R>,
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        return &mut self.atomic_callable;
+    }
+}
+
+/// Implementation for a general callable
 impl<A, R, F> CallableCreate<A, R, F> for Callable<A, R, F>
 where
     F: FnOnce<A, Output = R>,
 {
+    /// Creates a new callable with the given handle and no arguments
     default fn new(self, handle: F) -> Self {
         return Callable {
-            stored_callable: StoredCallable {
-                atomic_callable: AtomicCallable { handle: Some(handle), arguments: None },
-                output: None,
-            },
+            atomic_callable: AtomicCallable { handle: Some(handle), arguments: None },
         };
     }
 
+    /// Stores arguments in the callable
     default fn args(mut self, arguments: A) -> Self {
         self.arguments = Some(arguments);
         return self;
     }
 }
 
+/// Implementation for a callable with a handle that indicates that it takes no
+/// arguments
 impl<R, F> CallableCreate<(), R, F> for Callable<(), R, F>
 where
     F: FnOnce<(), Output = R>,
 {
     fn new(self, handle: F) -> Self {
         return Callable {
-            stored_callable: StoredCallable {
-                atomic_callable: AtomicCallable { handle: Some(handle), arguments: Some(()) },
-                output: None,
-            },
+            atomic_callable: AtomicCallable { handle: Some(handle), arguments: Some(()) },
         };
     }
 
@@ -196,392 +217,394 @@ where
     }
 }
 
-impl<A, R, F> Deref for Callable<A, R, F>
+impl<A, R, F> RunAndReturn for Callable<A, R, F>
 where
     F: FnOnce<A, Output = R>,
 {
-    type Target = StoredCallable<A, R, F>;
+    type ReturnType = R;
 
-    fn deref(&self) -> &Self::Target {
-        return &self.stored_callable;
-    }
-}
-
-impl<A, R, F> DerefMut for Callable<A, R, F>
-where
-    F: FnOnce<A, Output = R>,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        return &mut self.stored_callable;
-    }
-}
-
-impl<A, R, F> Runnable for Callable<A, R, F>
-where
-    F: FnOnce<A, Output = R>,
-{
-    default fn run(&mut self) {
-        self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-            let arguments = self
+    default fn run_and_return(&mut self) -> Result<Self::ReturnType, Error> {
+        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
+            let arguments: A = self
                 .arguments
-                .take()
-                .expect("Arguments not provided or are not in the valid format...");
-            let handle = self.handle.take().expect("Handle not provided or is moved...");
-            handle.call_once(arguments)
-        })));
-    }
-}
-
-impl<A, R, F> Runnable for Callable<A, R, F>
-where
-    F: FnMut<A, Output = R>,
-{
-    default fn run(&mut self) {
-        self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-            let arguments = self
-                .arguments
-                .take()
-                .expect("Arguments not provided or are not in the valid format...");
-            let handle = self.handle.as_mut().expect("Handle not provided or is moved...");
-            handle.call_mut(arguments)
-        })));
-    }
-}
-
-impl<A, R, F> Runnable for Callable<A, R, F>
-where
-    F: Fn<A, Output = R>,
-{
-    fn run(&mut self) {
-        self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-            let arguments = self
-                .arguments
-                .take()
-                .expect("Arguments not provided or are not in the valid format...");
-            let handle = self.handle.as_mut().expect("Handle not provided or is moved...");
-            handle.call(arguments)
-        })));
-    }
-}
-
-/// A trait that exists solely to specialize the implementation of `new` and
-/// `args` methods in `LoggedCallable` for the case of no arguments
-pub trait LoggedCallableCreate<
-    A, // arguments as a tuple
-    R, // return type
-    F, // Fn trait (like Fn, FnOnce, and FnMut)
-> where
-    F: FnOnce<A, Output = R>,
-{
-    fn new<S: Into<String>>(self: Self, handle: F, handle_string: S) -> Self;
-    fn args<S: Into<String>>(self: Self, arguments: A, arguments_string: S) -> Self;
-}
-
-/// A trait that exists solely to specialize the implementation of the
-/// `generate_log` method in `LoggedCallable` over the return type
-pub trait LoggedCallableLog
-{
-    fn generate_log(&self) -> String;
-}
-
-/// A struct denoting a logged callable object, like a function, method, or a
-/// closure that implements one of Fn, FnOnce or FnMut.
-// #[derive(Debug, Clone)]
-pub struct LoggedCallable<
-    'a, // the lifetime specifier of the logging format,
-    A,  // arguments as a tuple
-    R,  // return type
-    F,  // Fn trait (like Fn, FnOnce, and FnMut)
-> where
-    F: FnOnce<A, Output = R>,
-{
-    stored_callable: StoredCallable<A, R, F>,
-    task_id: usize,
-    logging_data: Option<CallableLoggingData>,
-    logging_format: Option<&'a CallableLoggingFormat>,
-}
-
-pub type LoggedFunction<'a, A, R, F> = LoggedCallable<'a, A, R, F>;
-pub type LoggedMethod<'a, A, R, F> = LoggedCallable<'a, A, R, F>;
-pub type LoggedClosure<'a, A, R, F> = LoggedCallable<'a, A, R, F>;
-
-impl<'a, A, R, F> LoggedCallableLog for LoggedCallable<'a, A, R, F>
-where
-    F: FnOnce<A, Output = R>,
-{
-    default fn generate_log(&self) -> String {
-        if let Some(logging_format) = self.logging_format {
-            // let return_string: String;
-            logging_format.iter().fold(String::new(), |mut accumulator_string, token| {
-            
-                accumulator_string.push_str(match token {
-                    CallableLoggingFormatToken::Handle => {
-                        if let Some(logging_data) = self.logging_data.as_ref() {
-                            &logging_data.handle
-                        } else {
-                            "N.A."
-                        }
-                    }
-                    CallableLoggingFormatToken::Arguments => {
-                        if let Some(logging_data) = self.logging_data.as_ref() {
-                            &logging_data.arguments
-                        } else {
-                            "N.A."
-                        }
-                    }
-                    CallableLoggingFormatToken::ArbitraryString(arbitrary_string) => {
-                        arbitrary_string
-                    }
-                    CallableLoggingFormatToken::Output => {
-                        if let Some(output) = self.output.as_ref() {
-                            match output {
-                                Ok(_return_value) => {
-                                    // return_string = format!("{:?}", return_value);
-                                    // &return_string
-                                    "N.A."
-                                }
-                                Err(_error) => "N.A.",
-                            }
-                        } else {
-                            "N.A."
-                        }
-                    }
-                });
-                return accumulator_string;
-            })
-        } else {
-            String::from("N.A.")
-        }
-    }
-}
-
-impl<'a, A, R, F> LoggedCallableLog for LoggedCallable<'a, A, R, F>
-where
-    R: Debug,
-    F: FnOnce<A, Output = R>,
-{
-    default fn generate_log(&self) -> String {
-        if let Some(logging_format) = self.logging_format {
-            logging_format.iter().fold(String::new(), |mut accumulator_string, token| {
-                let return_string: String;
-                accumulator_string.push_str(match token {
-                    CallableLoggingFormatToken::Handle => {
-                        if let Some(logging_data) = self.logging_data.as_ref() {
-                            &logging_data.handle
-                        } else {
-                            "N.A."
-                        }
-                    }
-                    CallableLoggingFormatToken::Arguments => {
-                        if let Some(logging_data) = self.logging_data.as_ref() {
-                            &logging_data.arguments
-                        } else {
-                            "N.A."
-                        }
-                    }
-                    CallableLoggingFormatToken::ArbitraryString(arbitrary_string) => {
-                        arbitrary_string
-                    }
-                    CallableLoggingFormatToken::Output => {
-                        if let Some(output) = self.output.as_ref() {
-                            match output {
-                                Ok(return_value) => {
-                                    return_string = format!("{:?}", return_value);
-                                    &return_string
-                                }
-                                Err(_error) => "N.A.",
-                            }
-                        } else {
-                            "N.A."
-                        }
-                    }
-                });
-                return accumulator_string;
-            })
-        } else {
-            String::from("N.A.")
-        }
-    }
-}
-
-impl<'a, A, R, F> LoggedCallableLog for LoggedCallable<'a, A, R, F>
-where
-    R: Display + Debug,
-    F: FnOnce<A, Output = R>,
-{
-    fn generate_log(&self) -> String {
-        if let Some(logging_format) = self.logging_format {
-            logging_format.iter().fold(String::new(), |mut accumulator_string, token| {
-                let return_string: String;
-                accumulator_string.push_str(match token {
-                    CallableLoggingFormatToken::Handle => {
-                        if let Some(logging_data) = self.logging_data.as_ref() {
-                            &logging_data.handle
-                        } else {
-                            "N.A."
-                        }
-                    }
-                    CallableLoggingFormatToken::Arguments => {
-                        if let Some(logging_data) = self.logging_data.as_ref() {
-                            &logging_data.arguments
-                        } else {
-                            "N.A."
-                        }
-                    }
-                    CallableLoggingFormatToken::ArbitraryString(arbitrary_string) => {
-                        arbitrary_string
-                    }
-                    CallableLoggingFormatToken::Output => {
-                        if let Some(output) = self.output.as_ref() {
-                            match output {
-                                Ok(return_value) => {
-                                    return_string = format!("{}", return_value);
-                                    &return_string
-                                }
-                                Err(_error) => "N.A.",
-                            }
-                        } else {
-                            "N.A."
-                        }
-                    }
-                });
-                return accumulator_string;
-            })
-        } else {
-            String::from("N.A.")
-        }
-    }
-}
-
-impl<'a, A, R, F> LoggedCallableCreate<A, R, F> for LoggedCallable<'a, A, R, F>
-where
-    F: FnOnce<A, Output = R>,
-{
-    default fn new<S: Into<String>>(self, handle: F, handle_string: S) -> Self {
-        return LoggedCallable {
-            stored_callable: StoredCallable {
-                atomic_callable: AtomicCallable { handle: Some(handle), arguments: None },
-                output: None,
-            },
-            task_id: generate_task_id(),
-            logging_data: Some(CallableLoggingData {
-                handle: handle_string.into(),
-                arguments: String::new(),
-            }),
-            logging_format: None,
+                .take().context(CallableArgumentsMissing)?;
+            let handle: F = self.handle.take().context(CallableHandleMissing)?;
+            Ok(handle.call_once(arguments))
+        }));
+        let output = match output {
+            Ok(inner) => inner,
+            Err(_inner) => Box::new(CallablePanicked).fail()
         };
-    }
-
-    default fn args<S: Into<String>>(mut self, arguments: A, arguments_string: S) -> Self {
-        self.arguments = Some(arguments);
-        if let Some(mut logging_data_inner) = self.logging_data.as_mut() {
-            logging_data_inner.arguments = arguments_string.into();
-        }
-        return self;
+        output.map_err(|error| -> Error {
+            Box::new(error)
+        })
     }
 }
 
-impl<'a, R, F> LoggedCallableCreate<(), R, F> for LoggedCallable<'a, (), R, F>
-where
-    F: FnOnce<(), Output = R>,
-{
-    fn new<S: Into<String>>(self, handle: F, handle_string: S) -> Self {
-        return LoggedCallable {
-            stored_callable: StoredCallable {
-                atomic_callable: AtomicCallable { handle: Some(handle), arguments: Some(()) },
-                output: None,
-            },
-            task_id: generate_task_id(),
-            logging_data: Some(CallableLoggingData {
-                handle: handle_string.into(),
-                arguments: String::from("()"),
-            }),
-            logging_format: None,
-        };
-    }
+// impl<A, R, F> Run for Callable<A, R, F>
+// where
+//     F: FnOnce<A, Output = R>,
+// {
+//     default fn run(&mut self) {
+//         self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
+//             let arguments = self
+//                 .arguments
+//                 .take()
+//                 .expect("Arguments not provided or are not in the valid format...");
+//             let handle = self.handle.take().expect("Handle not provided or is moved...");
+//             handle.call_once(arguments)
+//         })));
+//     }
+// }
 
-    fn args<S: Into<String>>(mut self, arguments: (), arguments_string: S) -> Self {
-        self.arguments = Some(arguments);
-        if let Some(mut logging_data_inner) = self.logging_data.as_mut() {
-            logging_data_inner.arguments = arguments_string.into();
-        }
-        return self;
-    }
-}
+// impl<A, R, F> Runnable for Callable<A, R, F>
+// where
+//     F: FnMut<A, Output = R>,
+// {
+//     default fn run(&mut self) {
+//         self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
+//             let arguments = self
+//                 .arguments
+//                 .take()
+//                 .expect("Arguments not provided or are not in the valid format...");
+//             let handle = self.handle.as_mut().expect("Handle not provided or is moved...");
+//             handle.call_mut(arguments)
+//         })));
+//     }
+// }
 
-impl<'a, A, R, F> Deref for LoggedCallable<'a, A, R, F>
-where
-    F: FnOnce<A, Output = R>,
-{
-    type Target = StoredCallable<A, R, F>;
+// impl<A, R, F> Runnable for Callable<A, R, F>
+// where
+//     F: Fn<A, Output = R>,
+// {
+//     fn run(&mut self) {
+//         self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
+//             let arguments = self
+//                 .arguments
+//                 .take()
+//                 .expect("Arguments not provided or are not in the valid format...");
+//             let handle = self.handle.as_mut().expect("Handle not provided or is moved...");
+//             handle.call(arguments)
+//         })));
+//     }
+// }
 
-    fn deref(&self) -> &Self::Target {
-        return &self.stored_callable;
-    }
-}
+// // endregion: CALLABLE
 
-impl<'a, A, R, F> DerefMut for LoggedCallable<'a, A, R, F>
-where
-    F: FnOnce<A, Output = R>,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        return &mut self.stored_callable;
-    }
-}
+// // region: LOGGED CALLABLE
 
-impl<'a, A, R, F> Runnable for LoggedCallable<'a, A, R, F>
-where
-    F: FnOnce<A, Output = R>,
-{
-    default fn run(&mut self) {
-        let output = panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-            let arguments = self
-                .arguments
-                .take()
-                .expect("Arguments not provided or are not in the valid format...");
-            let handle = self.handle.take().expect("Handle not provided or is moved...");
-            handle.call_once(arguments)
-        }));
-        self.generate_log();
-        self.output = Some(output);
-    }
-}
+// /// A trait that exists solely to specialize the implementation of `new` and
+// /// `args` methods in `LoggedCallable` for the case of no arguments
+// pub trait LoggedCallableCreate<
+//     A, // arguments as a tuple
+//     R, // return type
+//     F, // Fn trait (like Fn, FnOnce, and FnMut)
+// > where
+//     F: FnOnce<A, Output = R>,
+// {
+//     fn new<S: Into<String>>(self: Self, handle: F, handle_string: S) -> Self;
+//     fn args<S: Into<String>>(self: Self, arguments: A, arguments_string: S) -> Self;
+// }
 
-impl<'a, A, R, F> Runnable for LoggedCallable<'a, A, R, F>
-where
-    F: FnMut<A, Output = R>,
-{
-    default fn run(&mut self) {
-        let output = panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-            let arguments = self
-                .arguments
-                .take()
-                .expect("Arguments not provided or are not in the valid format...");
-            let handle = self.handle.as_mut().expect("Handle not provided or is moved...");
-            handle.call_mut(arguments)
-        }));
-        self.generate_log();
-        self.output = Some(output);
-    }
-}
+// /// A trait that exists solely to specialize the implementation of the
+// /// `generate_log` method in `LoggedCallable` over the return type
+// pub trait LoggedCallableLog {
+//     fn generate_log(&self) -> String;
+// }
 
-impl<'a, A, R, F> Runnable for LoggedCallable<'a, A, R, F>
-where
-    F: Fn<A, Output = R>,
-{
-    fn run(&mut self) {
-        let output = panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-            let arguments = self
-                .arguments
-                .take()
-                .expect("Arguments not provided or are not in the valid format...");
-            let handle = self.handle.as_mut().expect("Handle not provided or is moved...");
-            handle.call(arguments)
-        }));
-        self.generate_log();
-        self.output = Some(output);
-    }
-}
+// /// A struct denoting a logged callable object, like a function, method, or a
+// /// closure that implements one of Fn, FnOnce or FnMut.
+// // #[derive(Debug, Clone)]
+// pub struct LoggedCallable<
+//     'a, // the lifetime specifier of the logging format,
+//     A,  // arguments as a tuple
+//     R,  // return type
+//     F,  // Fn trait (like Fn, FnOnce, and FnMut)
+// > where
+//     F: FnOnce<A, Output = R>,
+// {
+//     stored_callable: AtomicCallable<A, R, F>,
+//     task_id: usize,
+//     logging_data: Option<LoggingData>,
+//     logging_format: Option<&'a LoggingFormat>,
+// }
+
+// pub type LoggedFunction<'a, A, R, F> = LoggedCallable<'a, A, R, F>;
+// pub type LoggedMethod<'a, A, R, F> = LoggedCallable<'a, A, R, F>;
+// pub type LoggedClosure<'a, A, R, F> = LoggedCallable<'a, A, R, F>;
+
+// impl<'a, A, R, F> LoggedCallableLog for LoggedCallable<'a, A, R, F>
+// where
+//     F: FnOnce<A, Output = R>,
+// {
+//     default fn generate_log(&self) -> String {
+//         if let Some(logging_format) = self.logging_format {
+//             // let return_string: String;
+//             logging_format.iter().fold(String::new(), |mut accumulator_string, token| {
+//                 accumulator_string.push_str(match token {
+//                     LoggingFormatToken::Handle => {
+//                         if let Some(logging_data) = self.logging_data.as_ref() {
+//                             &logging_data.handle
+//                         } else {
+//                             "N.A."
+//                         }
+//                     }
+//                     LoggingFormatToken::Arguments => {
+//                         if let Some(logging_data) = self.logging_data.as_ref() {
+//                             &logging_data.arguments
+//                         } else {
+//                             "N.A."
+//                         }
+//                     }
+//                     LoggingFormatToken::ArbitraryString(arbitrary_string) => arbitrary_string,
+//                     LoggingFormatToken::Output => {
+//                         if let Some(output) = self.output.as_ref() {
+//                             match output {
+//                                 Ok(_return_value) => {
+//                                     // return_string = format!("{:?}", return_value);
+//                                     // &return_string
+//                                     "N.A."
+//                                 }
+//                                 Err(_error) => "N.A.",
+//                             }
+//                         } else {
+//                             "N.A."
+//                         }
+//                     }
+//                 });
+//                 return accumulator_string;
+//             })
+//         } else {
+//             String::from("N.A.")
+//         }
+//     }
+// }
+
+// impl<'a, A, R, F> LoggedCallableLog for LoggedCallable<'a, A, R, F>
+// where
+//     R: Debug,
+//     F: FnOnce<A, Output = R>,
+// {
+//     default fn generate_log(&self) -> String {
+//         if let Some(logging_format) = self.logging_format {
+//             logging_format.iter().fold(String::new(), |mut accumulator_string, token| {
+//                 let return_string: String;
+//                 accumulator_string.push_str(match token {
+//                     LoggingFormatToken::Handle => {
+//                         if let Some(logging_data) = self.logging_data.as_ref() {
+//                             &logging_data.handle
+//                         } else {
+//                             "N.A."
+//                         }
+//                     }
+//                     LoggingFormatToken::Arguments => {
+//                         if let Some(logging_data) = self.logging_data.as_ref() {
+//                             &logging_data.arguments
+//                         } else {
+//                             "N.A."
+//                         }
+//                     }
+//                     LoggingFormatToken::ArbitraryString(arbitrary_string) => arbitrary_string,
+//                     LoggingFormatToken::Output => {
+//                         if let Some(output) = self.output.as_ref() {
+//                             match output {
+//                                 Ok(return_value) => {
+//                                     return_string = format!("{:?}", return_value);
+//                                     &return_string
+//                                 }
+//                                 Err(_error) => "N.A.",
+//                             }
+//                         } else {
+//                             "N.A."
+//                         }
+//                     }
+//                 });
+//                 return accumulator_string;
+//             })
+//         } else {
+//             String::from("N.A.")
+//         }
+//     }
+// }
+
+// impl<'a, A, R, F> LoggedCallableLog for LoggedCallable<'a, A, R, F>
+// where
+//     R: Display + Debug,
+//     F: FnOnce<A, Output = R>,
+// {
+//     fn generate_log(&self) -> String {
+//         if let Some(logging_format) = self.logging_format {
+//             logging_format.iter().fold(String::new(), |mut accumulator_string, token| {
+//                 let return_string: String;
+//                 accumulator_string.push_str(match token {
+//                     LoggingFormatToken::Handle => {
+//                         if let Some(logging_data) = self.logging_data.as_ref() {
+//                             &logging_data.handle
+//                         } else {
+//                             "N.A."
+//                         }
+//                     }
+//                     LoggingFormatToken::Arguments => {
+//                         if let Some(logging_data) = self.logging_data.as_ref() {
+//                             &logging_data.arguments
+//                         } else {
+//                             "N.A."
+//                         }
+//                     }
+//                     LoggingFormatToken::ArbitraryString(arbitrary_string) => arbitrary_string,
+//                     LoggingFormatToken::Output => {
+//                         if let Some(output) = self.output.as_ref() {
+//                             match output {
+//                                 Ok(return_value) => {
+//                                     return_string = format!("{}", return_value);
+//                                     &return_string
+//                                 }
+//                                 Err(_error) => "N.A.",
+//                             }
+//                         } else {
+//                             "N.A."
+//                         }
+//                     }
+//                 });
+//                 return accumulator_string;
+//             })
+//         } else {
+//             String::from("N.A.")
+//         }
+//     }
+// }
+
+// impl<'a, A, R, F> LoggedCallableCreate<A, R, F> for LoggedCallable<'a, A, R, F>
+// where
+//     F: FnOnce<A, Output = R>,
+// {
+//     default fn new<S: Into<String>>(self, handle: F, handle_string: S) -> Self {
+//         return LoggedCallable {
+//             stored_callable: AtomicCallable {
+//                 atomic_callable: AtomicCallable { handle: Some(handle), arguments: None },
+//                 output: None,
+//             },
+//             task_id: generate_task_id(),
+//             logging_data: Some(LoggingData {
+//                 handle: handle_string.into(),
+//                 arguments: String::new(),
+//             }),
+//             logging_format: None,
+//         };
+//     }
+
+//     default fn args<S: Into<String>>(mut self, arguments: A, arguments_string: S) -> Self {
+//         self.arguments = Some(arguments);
+//         if let Some(mut logging_data_inner) = self.logging_data.as_mut() {
+//             logging_data_inner.arguments = arguments_string.into();
+//         }
+//         return self;
+//     }
+// }
+
+// impl<'a, R, F> LoggedCallableCreate<(), R, F> for LoggedCallable<'a, (), R, F>
+// where
+//     F: FnOnce<(), Output = R>,
+// {
+//     fn new<S: Into<String>>(self, handle: F, handle_string: S) -> Self {
+//         return LoggedCallable {
+//             stored_callable: AtomicCallable {
+//                 atomic_callable: AtomicCallable { handle: Some(handle), arguments: Some(()) },
+//                 output: None,
+//             },
+//             task_id: generate_task_id(),
+//             logging_data: Some(LoggingData {
+//                 handle: handle_string.into(),
+//                 arguments: String::from("()"),
+//             }),
+//             logging_format: None,
+//         };
+//     }
+
+//     fn args<S: Into<String>>(mut self, arguments: (), arguments_string: S) -> Self {
+//         self.arguments = Some(arguments);
+//         if let Some(mut logging_data_inner) = self.logging_data.as_mut() {
+//             logging_data_inner.arguments = arguments_string.into();
+//         }
+//         return self;
+//     }
+// }
+
+// impl<'a, A, R, F> Deref for LoggedCallable<'a, A, R, F>
+// where
+//     F: FnOnce<A, Output = R>,
+// {
+//     type Target = AtomicCallable<A, R, F>;
+
+//     fn deref(&self) -> &Self::Target {
+//         return &self.stored_callable;
+//     }
+// }
+
+// impl<'a, A, R, F> DerefMut for LoggedCallable<'a, A, R, F>
+// where
+//     F: FnOnce<A, Output = R>,
+// {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         return &mut self.stored_callable;
+//     }
+// }
+
+// impl<'a, A, R, F> Runnable for LoggedCallable<'a, A, R, F>
+// where
+//     F: FnOnce<A, Output = R>,
+// {
+//     default fn run(&mut self) {
+//         let output = panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
+//             let arguments = self
+//                 .arguments
+//                 .take()
+//                 .expect("Arguments not provided or are not in the valid format...");
+//             let handle = self.handle.take().expect("Handle not provided or is moved...");
+//             handle.call_once(arguments)
+//         }));
+//         self.generate_log();
+//         self.output = Some(output);
+//     }
+// }
+
+// impl<'a, A, R, F> Runnable for LoggedCallable<'a, A, R, F>
+// where
+//     F: FnMut<A, Output = R>,
+// {
+//     default fn run(&mut self) {
+//         let output = panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
+//             let arguments = self
+//                 .arguments
+//                 .take()
+//                 .expect("Arguments not provided or are not in the valid format...");
+//             let handle = self.handle.as_mut().expect("Handle not provided or is moved...");
+//             handle.call_mut(arguments)
+//         }));
+//         self.generate_log();
+//         self.output = Some(output);
+//     }
+// }
+
+// impl<'a, A, R, F> Runnable for LoggedCallable<'a, A, R, F>
+// where
+//     F: Fn<A, Output = R>,
+// {
+//     fn run(&mut self) {
+//         let output = panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
+//             let arguments = self
+//                 .arguments
+//                 .take()
+//                 .expect("Arguments not provided or are not in the valid format...");
+//             let handle = self.handle.as_mut().expect("Handle not provided or is moved...");
+//             handle.call(arguments)
+//         }));
+//         self.generate_log();
+//         self.output = Some(output);
+//     }
+// }
+
+// endregion: LOGGED CALLABLE
 
 // #[cfg(test)]
 // mod tests {

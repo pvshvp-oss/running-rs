@@ -9,39 +9,97 @@
 //! set of them with optional live logging and optional asynchrony.
 
 use async_trait::async_trait;
+use snafu::ResultExt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 mod callable; // for types and traits pertaining to the execution of functions and closures
-mod instruction; // for types and traits pertaining to the execution of programs, scripts, and operating system commands
-mod runnable; // for types and traits pertaining to the execution of a batch of callables and commands
+mod instruction; /* for types and traits pertaining to the execution of programs, scripts, and
+                  * operating system commands */
+mod runnable; // for types and traits pertaining to the execution of a batch of callables and
+              // commands
+
+pub trait ErrorTrait: std::error::Error + snafu::ErrorCompat {}
+impl<T> ErrorTrait for T where T: std::error::Error + snafu::ErrorCompat {}
+pub type Error = Box<dyn ErrorTrait>;
 
 static TASK_ID_GENERATOR: AtomicUsize = AtomicUsize::new(0); // initialize the unique task ID generator
-
 pub fn generate_task_id() -> usize {
     TASK_ID_GENERATOR.fetch_add(1, Ordering::Relaxed)
 }
 
 /// A trait that represents entities that can be executed (or run). This can
 /// include functions, closures, scripts, executable binaries, operating system
-/// commands (that can themselves be made up of pipes and redirections), or a
-/// set containing one or more of the above (referred to here as `Job`s)
-///
-/// The generic variable `R` refers to the return type whereas `E` refers to the
-/// error type.
-#[async_trait]
-pub trait AsyncRunnable {
-    async fn run(&mut self);
+/// commands, or a set containing one or more of the above
+pub trait Run {
+    fn run(&mut self) -> Result<(), Error>;
 }
 
-/// A trait that represents entities that can be executed (or run). This can
-/// include functions, closures, scripts, executable binaries, operating system
-/// commands (that can themselves be made up of pipes and redirections), or a
-/// set containing one or more of the above (referred to here as `Job`s)
-///
-/// The generic variable `R` refers to the return type whereas `E` refers to the
-/// error type.
-pub trait Runnable {
-    fn run(&mut self);
+/// Does what the [Run] trait does, but calls the callback function with the
+/// return value when complete
+pub trait RunAndCallback: RunAndReturn {
+    fn run_and_then<C: FnOnce(Self::ReturnType) -> ()>(&mut self, callback: C)
+        -> Result<(), Error>;
+}
+
+/// Does what the [Run] trait does, but returns the
+/// return value when complete
+pub trait RunAndReturn {
+    type ReturnType;
+
+    fn run_and_return(&mut self) -> Result<Self::ReturnType, Box<dyn ErrorTrait>>;
+}
+
+/// Does what the [Run] trait does, but returns the
+/// debug string of the retrn value when complete
+pub trait RunAndDebug: RunAndReturn {
+    fn run_and_debug(&mut self) -> Result<String, Error>;
+}
+
+/// Does what the [Run] trait does, but returns the
+/// display string of the retrn value when complete
+pub trait RunAndDisplay: RunAndReturn {
+    fn run_and_display(&mut self) -> Result<String, Error>;
+}
+
+/// A trait that represents entities that can be executed (or run)
+/// asynchronously. This can include functions, closures, scripts, executable
+/// binaries, operating system commands, or a set containing one or more of the
+/// above
+#[async_trait]
+pub trait AsyncRun {
+    async fn async_run(&mut self) -> Result<(), Error>;
+}
+
+/// Does what the [AsyncRun] trait does, but calls the callback function with
+/// the return value when complete
+#[async_trait]
+pub trait AsyncRunAndCallback {
+    type ReturnType;
+
+    fn async_run_and_then<C: FnOnce(Self::ReturnType) -> ()>(
+        &mut self,
+        callback: C,
+    ) -> Result<(), Error>;
+}
+
+/// Does what the [AsyncRun] trait does, but returns the
+/// return value when complete
+pub trait AsyncRunAndReturn {
+    type ReturnType;
+
+    fn async_run_and_return(&mut self) -> Result<Self::ReturnType, Error>;
+}
+
+/// Does what the [AsyncRun] trait does, but returns the
+/// debug string of the retrn value when complete
+pub trait AsyncRunAndDebug {
+    fn async_run_and_debug(&mut self) -> Result<String, Error>;
+}
+
+/// Does what the [AsyncRun] trait does, but returns the
+/// display string of the retrn value when complete
+pub trait AsyncRunAndDisplay {
+    fn async_run_and_display(&mut self) -> Result<String, Error>;
 }
 
 #[cfg(test)]
@@ -49,7 +107,8 @@ mod tests {
 
     // IMPORTS
 
-    use fern::colors::{Color, ColoredLevelConfig}; // for setting up logging colors on the console
+    use fern::colors::{Color, ColoredLevelConfig}; /* for setting up logging colors on the
+                                                    * console */
     use std::sync::Once; // for calling the log initialization once
 
     // GLOBAL VARIABLES
@@ -63,24 +122,28 @@ mod tests {
         LOGGING_INITIALIZER.call_once(|| {
             let mut base_config = fern::Dispatch::new();
             base_config = match verbosity {
-                log::LevelFilter::Off => base_config
-                    .level(verbosity)
-                    .level_for("console-target", log::LevelFilter::Off),
-                log::LevelFilter::Trace => base_config
-                    .level(verbosity)
-                    .level_for("console-target", log::LevelFilter::Debug),
-                log::LevelFilter::Debug => base_config
-                    .level(verbosity)
-                    .level_for("console-target", log::LevelFilter::Info),
-                log::LevelFilter::Info => base_config
-                    .level(verbosity)
-                    .level_for("console-target", log::LevelFilter::Warn),
-                log::LevelFilter::Warn => base_config
-                    .level(verbosity)
-                    .level_for("console-target", log::LevelFilter::Error),
-                log::LevelFilter::Error => base_config
-                    .level(verbosity)
-                    .level_for("console-target", log::LevelFilter::Off),
+                log::LevelFilter::Off => {
+                    base_config.level(verbosity).level_for("console-target", log::LevelFilter::Off)
+                }
+                log::LevelFilter::Trace => {
+                    base_config
+                        .level(verbosity)
+                        .level_for("console-target", log::LevelFilter::Debug)
+                }
+                log::LevelFilter::Debug => {
+                    base_config.level(verbosity).level_for("console-target", log::LevelFilter::Info)
+                }
+                log::LevelFilter::Info => {
+                    base_config.level(verbosity).level_for("console-target", log::LevelFilter::Warn)
+                }
+                log::LevelFilter::Warn => {
+                    base_config
+                        .level(verbosity)
+                        .level_for("console-target", log::LevelFilter::Error)
+                }
+                log::LevelFilter::Error => {
+                    base_config.level(verbosity).level_for("console-target", log::LevelFilter::Off)
+                }
             };
 
             let file_config = fern::Dispatch::new()
@@ -119,11 +182,7 @@ mod tests {
                 })
                 .chain(std::io::stdout());
 
-            base_config
-                .chain(file_config)
-                .chain(stdout_config)
-                .apply()
-                .unwrap();
+            base_config.chain(file_config).chain(stdout_config).apply().unwrap();
         })
     }
 }

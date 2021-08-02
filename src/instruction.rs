@@ -1,101 +1,101 @@
 // IMPORTS
-use crate::Runnable;
+use crate::Run;
 use std::{
     ffi::OsStr,
     ops::{Deref, DerefMut},
 };
 
-#[cfg(feature = "async")]
-use {async_trait::async_trait, tokio::process::Child};
+// #[cfg(feature = "async")]
+// use {async_trait::async_trait, tokio::process::Child};
 
-#[cfg(not(feature = "async"))]
-use std::process::Child;
+// #[cfg(not(feature = "async"))]
+// use std::process::Child;
 
-// TODO
-/*
-- Logging
-- Async
-- Pipe method and operator
-*/
+// // TODO
+// /*
+// - Logging
+// - Async
+// - Pipe method and operator
+// */
 
-// STRUCT DECLARATIONS
+// // STRUCT DECLARATIONS
 
-#[cfg(not(feature = "async"))]
-pub struct Command {
-    inner_command: std::process::Command,
-    result: Option<std::io::Result<Child>>,
-}
+// #[cfg(not(feature = "async"))]
+// pub struct Command {
+//     inner_command: std::process::Command,
+//     result: Option<std::io::Result<Child>>,
+// }
 
-#[cfg(feature = "async")]
-pub struct Command {
-    inner_command: tokio::process::Command,
-    result: Option<std::io::Result<Child>>,
-}
+// #[cfg(feature = "async")]
+// pub struct Command {
+//     inner_command: tokio::process::Command,
+//     result: Option<std::io::Result<Child>>,
+// }
 
-// STRUCT IMPLEMENTATIONS
+// // STRUCT IMPLEMENTATIONS
 
-impl Command {
-    pub fn new<S: AsRef<OsStr>>(program: S) -> Command {
-        Command {
-            result: None,
+// impl Command {
+//     pub fn new<S: AsRef<OsStr>>(program: S) -> Command {
+//         Command {
+//             result: None,
 
-            #[cfg(feature = "async")]
-            inner_command: tokio::process::Command::new(program),
+//             #[cfg(feature = "async")]
+//             inner_command: tokio::process::Command::new(program),
 
-            #[cfg(not(feature = "async"))]
-            inner_command: std::process::Command::new(program),
-        }
-    }
+//             #[cfg(not(feature = "async"))]
+//             inner_command: std::process::Command::new(program),
+//         }
+//     }
 
-    pub fn arg<S: AsRef<OsStr>>(&mut self, argument: S) -> &mut Command {
-        self.inner_command.arg(argument);
-        self
-    }
+//     pub fn arg<S: AsRef<OsStr>>(&mut self, argument: S) -> &mut Command {
+//         self.inner_command.arg(argument);
+//         self
+//     }
 
-    pub fn args<I, S>(&mut self, arguments: I) -> &mut Command
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>,
-    {
-        self.inner_command.args(arguments);
-        self
-    }
-}
+//     pub fn args<I, S>(&mut self, arguments: I) -> &mut Command
+//     where
+//         I: IntoIterator<Item = S>,
+//         S: AsRef<OsStr>,
+//     {
+//         self.inner_command.args(arguments);
+//         self
+//     }
+// }
 
-// TRAIT IMPLEMENTATIONS
+// // TRAIT IMPLEMENTATIONS
 
-impl Deref for Command {
-    #[cfg(feature = "async")]
-    type Target = tokio::process::Command;
+// impl Deref for Command {
+//     #[cfg(feature = "async")]
+//     type Target = tokio::process::Command;
 
-    #[cfg(not(feature = "async"))]
-    type Target = std::process::Command;
+//     #[cfg(not(feature = "async"))]
+//     type Target = std::process::Command;
 
-    fn deref(&self) -> &Self::Target {
-        &self.inner_command
-    }
-}
+//     fn deref(&self) -> &Self::Target {
+//         &self.inner_command
+//     }
+// }
 
-impl DerefMut for Command {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner_command
-    }
-}
+// impl DerefMut for Command {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.inner_command
+//     }
+// }
 
-#[cfg(feature = "async")]
-#[async_trait]
-impl Runnable for Command {
-    async fn run(&mut self) {
-        self.result = Some(self.inner_command.spawn().await);
-    }
-}
+// #[cfg(feature = "async")]
+// #[async_trait]
+// impl Runnable for Command {
+//     async fn run(&mut self) {
+//         self.result = Some(self.inner_command.spawn().await);
+//     }
+// }
 
-#[cfg(not(feature = "async"))]
-impl Runnable for Command {
-    fn run(&mut self) {
-        self.result = Some(self.inner_command.spawn());
-    }
-}
+// #[cfg(not(feature = "async"))]
+// impl Run for Command {
+//     fn run(&mut self) {
+//         self.result = Some(self.inner_command.spawn());
+//     }
+// }
 
 // TESTS
 
