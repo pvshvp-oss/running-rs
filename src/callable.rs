@@ -3,7 +3,7 @@
 use crate::generate_task_id;
 use crate::Error;
 use crate::{Run, RunAndCallback, RunAndDebug, RunAndDisplay, RunAndReturn};
-use snafu::{ErrorCompat, ResultExt, Snafu, Backtrace, OptionExt};
+use snafu::{Backtrace, ErrorCompat, OptionExt, ResultExt, Snafu};
 use std::any::Any;
 use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
@@ -17,17 +17,11 @@ use std::{panic, panic::AssertUnwindSafe};
 pub enum CallableError {
     // TODO: https://docs.rs/snafu/0.6.10/snafu/index.html
     #[snafu(display("Callable handle missing. Either it was not provided, or was moved during a previous method call"))]
-    CallableHandleMissing {
-        backtrace: Backtrace
-    },
+    CallableHandleMissing { backtrace: Backtrace },
     #[snafu(display("Callable arguments missing. Either they were not provided, or were moved during a previous method call"))]
-    CallableArgumentsMissing {
-        backtrace: Backtrace
-    },
+    CallableArgumentsMissing { backtrace: Backtrace },
     #[snafu(display("Callable panicked"))]
-    CallablePanicked {
-        backtrace: Backtrace
-    }
+    CallablePanicked { backtrace: Backtrace },
 }
 
 // endregion: ERRORS
@@ -225,19 +219,15 @@ where
 
     default fn run_and_return(&mut self) -> Result<Self::ReturnType, Error> {
         let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
-            let arguments: A = self
-                .arguments
-                .take().context(CallableArgumentsMissing)?;
+            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
             let handle: F = self.handle.take().context(CallableHandleMissing)?;
             Ok(handle.call_once(arguments))
         }));
         let output = match output {
             Ok(inner) => inner,
-            Err(_inner) => Box::new(CallablePanicked).fail()
+            Err(_inner) => Box::new(CallablePanicked).fail(),
         };
-        output.map_err(|error: CallableError| -> Error {
-            Box::new(error)
-        })
+        output.map_err(|error: CallableError| -> Error { Box::new(error) })
     }
 }
 
@@ -247,19 +237,15 @@ where
 {
     default fn run_and_return(&mut self) -> Result<Self::ReturnType, Error> {
         let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
-            let arguments: A = self
-                .arguments
-                .take().context(CallableArgumentsMissing)?;
+            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
             let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
             Ok(handle.call_mut(arguments))
         }));
         let output = match output {
             Ok(inner) => inner,
-            Err(_inner) => Box::new(CallablePanicked).fail()
+            Err(_inner) => Box::new(CallablePanicked).fail(),
         };
-        output.map_err(|error| -> Error {
-            Box::new(error)
-        })
+        output.map_err(|error| -> Error { Box::new(error) })
     }
 }
 
@@ -269,19 +255,15 @@ where
 {
     fn run_and_return(&mut self) -> Result<Self::ReturnType, Error> {
         let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
-            let arguments: A = self
-                .arguments
-                .take().context(CallableArgumentsMissing)?;
+            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
             let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
             Ok(handle.call(arguments))
         }));
         let output = match output {
             Ok(inner) => inner,
-            Err(_inner) => Box::new(CallablePanicked).fail()
+            Err(_inner) => Box::new(CallablePanicked).fail(),
         };
-        output.map_err(|error| -> Error {
-            Box::new(error)
-        })
+        output.map_err(|error| -> Error { Box::new(error) })
     }
 }
 
@@ -291,20 +273,16 @@ where
 {
     default fn run(&mut self) -> Result<(), Error> {
         let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<(), CallableError> {
-            let arguments: A = self
-                .arguments
-                .take().context(CallableArgumentsMissing)?;
+            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
             let handle: F = self.handle.take().context(CallableHandleMissing)?;
             handle.call_once(arguments);
             Ok(())
         }));
         let output = match output {
             Ok(inner) => inner,
-            Err(_inner) => Box::new(CallablePanicked).fail()
+            Err(_inner) => Box::new(CallablePanicked).fail(),
         };
-        output.map_err(|error: CallableError| -> Error {
-            Box::new(error)
-        })
+        output.map_err(|error: CallableError| -> Error { Box::new(error) })
     }
 }
 
@@ -314,20 +292,16 @@ where
 {
     default fn run(&mut self) -> Result<(), Error> {
         let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<(), CallableError> {
-            let arguments: A = self
-                .arguments
-                .take().context(CallableArgumentsMissing)?;
+            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
             let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
             handle.call_mut(arguments);
             Ok(())
         }));
         let output = match output {
             Ok(inner) => inner,
-            Err(_inner) => Box::new(CallablePanicked).fail()
+            Err(_inner) => Box::new(CallablePanicked).fail(),
         };
-        output.map_err(|error| -> Error {
-            Box::new(error)
-        })
+        output.map_err(|error| -> Error { Box::new(error) })
     }
 }
 
@@ -337,70 +311,59 @@ where
 {
     fn run(&mut self) -> Result<(), Error> {
         let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<(), CallableError> {
-            let arguments: A = self
-                .arguments
-                .take().context(CallableArgumentsMissing)?;
+            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
             let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
             handle.call(arguments);
             Ok(())
         }));
         let output = match output {
             Ok(inner) => inner,
-            Err(_inner) => Box::new(CallablePanicked).fail()
+            Err(_inner) => Box::new(CallablePanicked).fail(),
         };
-        output.map_err(|error| -> Error {
-            Box::new(error)
-        })
+        output.map_err(|error| -> Error { Box::new(error) })
     }
 }
 
-// impl<A, R, F> Run for Callable<A, R, F>
-// where
-//     F: FnOnce<A, Output = R>,
-// {
-//     default fn run(&mut self) {
-//         self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-//             let arguments = self
-//                 .arguments
-//                 .take()
-//                 .expect("Arguments not provided or are not in the valid format...");
-//             let handle = self.handle.take().expect("Handle not provided or is moved...");
-//             handle.call_once(arguments)
-//         })));
-//     }
-// }
+impl<A, R, F> RunAndCallback for Callable<A, R, F>
+where
+    F: FnOnce<A, Output = R>,
+{
+    fn run_and_then<C: FnOnce(Self::ReturnType) -> ()>(
+        &mut self,
+        callback: C,
+    ) -> Result<(), Error> {
+        match self.run_and_return(){
+            Ok(inner) => Ok(callback(inner)),
+            Err(inner) => Err(inner), 
+        }        
+    }
+}
 
-// impl<A, R, F> Runnable for Callable<A, R, F>
-// where
-//     F: FnMut<A, Output = R>,
-// {
-//     default fn run(&mut self) {
-//         self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-//             let arguments = self
-//                 .arguments
-//                 .take()
-//                 .expect("Arguments not provided or are not in the valid format...");
-//             let handle = self.handle.as_mut().expect("Handle not provided or is moved...");
-//             handle.call_mut(arguments)
-//         })));
-//     }
-// }
+impl<A, R, F> RunAndDebug for Callable<A, R, F>
+where
+    R: Debug,
+    F: FnOnce<A, Output = R>,
+{
+    fn run_and_debug(&mut self) -> Result<String, Error>{
+        match self.run_and_return(){
+            Ok(inner) => Ok(format!("{:?}", inner)),
+            Err(inner) => Err(inner), 
+        }        
+    }
+}
 
-// impl<A, R, F> Runnable for Callable<A, R, F>
-// where
-//     F: Fn<A, Output = R>,
-// {
-//     fn run(&mut self) {
-//         self.output = Some(panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-//             let arguments = self
-//                 .arguments
-//                 .take()
-//                 .expect("Arguments not provided or are not in the valid format...");
-//             let handle = self.handle.as_mut().expect("Handle not provided or is moved...");
-//             handle.call(arguments)
-//         })));
-//     }
-// }
+impl<A, R, F> RunAndDisplay for Callable<A, R, F>
+where
+    R: Display,
+    F: FnOnce<A, Output = R>,
+{
+    fn run_and_display(&mut self) -> Result<String, Error>{
+        match self.run_and_return(){
+            Ok(inner) => Ok(format!("{}", inner)),
+            Err(inner) => Err(inner), 
+        }        
+    }
+}
 
 // // endregion: CALLABLE
 
@@ -416,8 +379,8 @@ where
 //     F: FnOnce<A, Output = R>,
 // {
 //     fn new<S: Into<String>>(self: Self, handle: F, handle_string: S) -> Self;
-//     fn args<S: Into<String>>(self: Self, arguments: A, arguments_string: S) -> Self;
-// }
+//     fn args<S: Into<String>>(self: Self, arguments: A, arguments_string: S)
+// -> Self; }
 
 // /// A trait that exists solely to specialize the implementation of the
 // /// `generate_log` method in `LoggedCallable` over the return type
@@ -453,29 +416,29 @@ where
 //     default fn generate_log(&self) -> String {
 //         if let Some(logging_format) = self.logging_format {
 //             // let return_string: String;
-//             logging_format.iter().fold(String::new(), |mut accumulator_string, token| {
-//                 accumulator_string.push_str(match token {
-//                     LoggingFormatToken::Handle => {
-//                         if let Some(logging_data) = self.logging_data.as_ref() {
-//                             &logging_data.handle
-//                         } else {
+//             logging_format.iter().fold(String::new(), |mut
+// accumulator_string, token| {                 
+// accumulator_string.push_str(match token {                     
+// LoggingFormatToken::Handle => {                         if let
+// Some(logging_data) = self.logging_data.as_ref() {                            
+// &logging_data.handle                         } else {
 //                             "N.A."
 //                         }
 //                     }
 //                     LoggingFormatToken::Arguments => {
-//                         if let Some(logging_data) = self.logging_data.as_ref() {
-//                             &logging_data.arguments
-//                         } else {
+//                         if let Some(logging_data) =
+// self.logging_data.as_ref() {                             
+// &logging_data.arguments                         } else {
 //                             "N.A."
 //                         }
 //                     }
-//                     LoggingFormatToken::ArbitraryString(arbitrary_string) => arbitrary_string,
-//                     LoggingFormatToken::Output => {
+//                     LoggingFormatToken::ArbitraryString(arbitrary_string) =>
+// arbitrary_string,                     LoggingFormatToken::Output => {
 //                         if let Some(output) = self.output.as_ref() {
 //                             match output {
 //                                 Ok(_return_value) => {
-//                                     // return_string = format!("{:?}", return_value);
-//                                     // &return_string
+//                                     // return_string = format!("{:?}",
+// return_value);                                     // &return_string
 //                                     "N.A."
 //                                 }
 //                                 Err(_error) => "N.A.",
@@ -500,30 +463,30 @@ where
 // {
 //     default fn generate_log(&self) -> String {
 //         if let Some(logging_format) = self.logging_format {
-//             logging_format.iter().fold(String::new(), |mut accumulator_string, token| {
-//                 let return_string: String;
+//             logging_format.iter().fold(String::new(), |mut
+// accumulator_string, token| {                 let return_string: String;
 //                 accumulator_string.push_str(match token {
 //                     LoggingFormatToken::Handle => {
-//                         if let Some(logging_data) = self.logging_data.as_ref() {
-//                             &logging_data.handle
+//                         if let Some(logging_data) =
+// self.logging_data.as_ref() {                             &logging_data.handle
 //                         } else {
 //                             "N.A."
 //                         }
 //                     }
 //                     LoggingFormatToken::Arguments => {
-//                         if let Some(logging_data) = self.logging_data.as_ref() {
-//                             &logging_data.arguments
-//                         } else {
+//                         if let Some(logging_data) =
+// self.logging_data.as_ref() {                             
+// &logging_data.arguments                         } else {
 //                             "N.A."
 //                         }
 //                     }
-//                     LoggingFormatToken::ArbitraryString(arbitrary_string) => arbitrary_string,
-//                     LoggingFormatToken::Output => {
+//                     LoggingFormatToken::ArbitraryString(arbitrary_string) =>
+// arbitrary_string,                     LoggingFormatToken::Output => {
 //                         if let Some(output) = self.output.as_ref() {
 //                             match output {
 //                                 Ok(return_value) => {
-//                                     return_string = format!("{:?}", return_value);
-//                                     &return_string
+//                                     return_string = format!("{:?}",
+// return_value);                                     &return_string
 //                                 }
 //                                 Err(_error) => "N.A.",
 //                             }
@@ -547,30 +510,30 @@ where
 // {
 //     fn generate_log(&self) -> String {
 //         if let Some(logging_format) = self.logging_format {
-//             logging_format.iter().fold(String::new(), |mut accumulator_string, token| {
-//                 let return_string: String;
+//             logging_format.iter().fold(String::new(), |mut
+// accumulator_string, token| {                 let return_string: String;
 //                 accumulator_string.push_str(match token {
 //                     LoggingFormatToken::Handle => {
-//                         if let Some(logging_data) = self.logging_data.as_ref() {
-//                             &logging_data.handle
+//                         if let Some(logging_data) =
+// self.logging_data.as_ref() {                             &logging_data.handle
 //                         } else {
 //                             "N.A."
 //                         }
 //                     }
 //                     LoggingFormatToken::Arguments => {
-//                         if let Some(logging_data) = self.logging_data.as_ref() {
-//                             &logging_data.arguments
-//                         } else {
+//                         if let Some(logging_data) =
+// self.logging_data.as_ref() {                             
+// &logging_data.arguments                         } else {
 //                             "N.A."
 //                         }
 //                     }
-//                     LoggingFormatToken::ArbitraryString(arbitrary_string) => arbitrary_string,
-//                     LoggingFormatToken::Output => {
+//                     LoggingFormatToken::ArbitraryString(arbitrary_string) =>
+// arbitrary_string,                     LoggingFormatToken::Output => {
 //                         if let Some(output) = self.output.as_ref() {
 //                             match output {
 //                                 Ok(return_value) => {
-//                                     return_string = format!("{}", return_value);
-//                                     &return_string
+//                                     return_string = format!("{}",
+// return_value);                                     &return_string
 //                                 }
 //                                 Err(_error) => "N.A.",
 //                             }
@@ -587,15 +550,15 @@ where
 //     }
 // }
 
-// impl<'a, A, R, F> LoggedCallableCreate<A, R, F> for LoggedCallable<'a, A, R, F>
-// where
+// impl<'a, A, R, F> LoggedCallableCreate<A, R, F> for LoggedCallable<'a, A, R,
+// F> where
 //     F: FnOnce<A, Output = R>,
 // {
-//     default fn new<S: Into<String>>(self, handle: F, handle_string: S) -> Self {
-//         return LoggedCallable {
+//     default fn new<S: Into<String>>(self, handle: F, handle_string: S) ->
+// Self {         return LoggedCallable {
 //             stored_callable: AtomicCallable {
-//                 atomic_callable: AtomicCallable { handle: Some(handle), arguments: None },
-//                 output: None,
+//                 atomic_callable: AtomicCallable { handle: Some(handle),
+// arguments: None },                 output: None,
 //             },
 //             task_id: generate_task_id(),
 //             logging_data: Some(LoggingData {
@@ -606,8 +569,8 @@ where
 //         };
 //     }
 
-//     default fn args<S: Into<String>>(mut self, arguments: A, arguments_string: S) -> Self {
-//         self.arguments = Some(arguments);
+//     default fn args<S: Into<String>>(mut self, arguments: A,
+// arguments_string: S) -> Self {         self.arguments = Some(arguments);
 //         if let Some(mut logging_data_inner) = self.logging_data.as_mut() {
 //             logging_data_inner.arguments = arguments_string.into();
 //         }
@@ -615,15 +578,15 @@ where
 //     }
 // }
 
-// impl<'a, R, F> LoggedCallableCreate<(), R, F> for LoggedCallable<'a, (), R, F>
-// where
+// impl<'a, R, F> LoggedCallableCreate<(), R, F> for LoggedCallable<'a, (), R,
+// F> where
 //     F: FnOnce<(), Output = R>,
 // {
 //     fn new<S: Into<String>>(self, handle: F, handle_string: S) -> Self {
 //         return LoggedCallable {
 //             stored_callable: AtomicCallable {
-//                 atomic_callable: AtomicCallable { handle: Some(handle), arguments: Some(()) },
-//                 output: None,
+//                 atomic_callable: AtomicCallable { handle: Some(handle),
+// arguments: Some(()) },                 output: None,
 //             },
 //             task_id: generate_task_id(),
 //             logging_data: Some(LoggingData {
@@ -634,8 +597,8 @@ where
 //         };
 //     }
 
-//     fn args<S: Into<String>>(mut self, arguments: (), arguments_string: S) -> Self {
-//         self.arguments = Some(arguments);
+//     fn args<S: Into<String>>(mut self, arguments: (), arguments_string: S) ->
+// Self {         self.arguments = Some(arguments);
 //         if let Some(mut logging_data_inner) = self.logging_data.as_mut() {
 //             logging_data_inner.arguments = arguments_string.into();
 //         }
@@ -672,9 +635,9 @@ where
 //             let arguments = self
 //                 .arguments
 //                 .take()
-//                 .expect("Arguments not provided or are not in the valid format...");
-//             let handle = self.handle.take().expect("Handle not provided or is moved...");
-//             handle.call_once(arguments)
+//                 .expect("Arguments not provided or are not in the valid
+// format...");             let handle = self.handle.take().expect("Handle not
+// provided or is moved...");             handle.call_once(arguments)
 //         }));
 //         self.generate_log();
 //         self.output = Some(output);
@@ -690,9 +653,9 @@ where
 //             let arguments = self
 //                 .arguments
 //                 .take()
-//                 .expect("Arguments not provided or are not in the valid format...");
-//             let handle = self.handle.as_mut().expect("Handle not provided or is moved...");
-//             handle.call_mut(arguments)
+//                 .expect("Arguments not provided or are not in the valid
+// format...");             let handle = self.handle.as_mut().expect("Handle not
+// provided or is moved...");             handle.call_mut(arguments)
 //         }));
 //         self.generate_log();
 //         self.output = Some(output);
@@ -708,9 +671,9 @@ where
 //             let arguments = self
 //                 .arguments
 //                 .take()
-//                 .expect("Arguments not provided or are not in the valid format...");
-//             let handle = self.handle.as_mut().expect("Handle not provided or is moved...");
-//             handle.call(arguments)
+//                 .expect("Arguments not provided or are not in the valid
+// format...");             let handle = self.handle.as_mut().expect("Handle not
+// provided or is moved...");             handle.call(arguments)
 //         }));
 //         self.generate_log();
 //         self.output = Some(output);
