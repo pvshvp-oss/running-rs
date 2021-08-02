@@ -285,6 +285,75 @@ where
     }
 }
 
+impl<A, R, F> Run for Callable<A, R, F>
+where
+    F: FnOnce<A, Output = R>,
+{
+    default fn run(&mut self) -> Result<(), Error> {
+        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<(), CallableError> {
+            let arguments: A = self
+                .arguments
+                .take().context(CallableArgumentsMissing)?;
+            let handle: F = self.handle.take().context(CallableHandleMissing)?;
+            handle.call_once(arguments);
+            Ok(())
+        }));
+        let output = match output {
+            Ok(inner) => inner,
+            Err(_inner) => Box::new(CallablePanicked).fail()
+        };
+        output.map_err(|error: CallableError| -> Error {
+            Box::new(error)
+        })
+    }
+}
+
+impl<A, R, F> Run for Callable<A, R, F>
+where
+    F: FnMut<A, Output = R>,
+{
+    default fn run(&mut self) -> Result<(), Error> {
+        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<(), CallableError> {
+            let arguments: A = self
+                .arguments
+                .take().context(CallableArgumentsMissing)?;
+            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
+            handle.call_mut(arguments);
+            Ok(())
+        }));
+        let output = match output {
+            Ok(inner) => inner,
+            Err(_inner) => Box::new(CallablePanicked).fail()
+        };
+        output.map_err(|error| -> Error {
+            Box::new(error)
+        })
+    }
+}
+
+impl<A, R, F> Run for Callable<A, R, F>
+where
+    F: Fn<A, Output = R>,
+{
+    fn run(&mut self) -> Result<(), Error> {
+        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<(), CallableError> {
+            let arguments: A = self
+                .arguments
+                .take().context(CallableArgumentsMissing)?;
+            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
+            handle.call(arguments);
+            Ok(())
+        }));
+        let output = match output {
+            Ok(inner) => inner,
+            Err(_inner) => Box::new(CallablePanicked).fail()
+        };
+        output.map_err(|error| -> Error {
+            Box::new(error)
+        })
+    }
+}
+
 // impl<A, R, F> Run for Callable<A, R, F>
 // where
 //     F: FnOnce<A, Output = R>,
