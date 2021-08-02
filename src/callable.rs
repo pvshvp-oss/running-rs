@@ -489,17 +489,19 @@ impl<'a, A, R, F> LoggedCallable<'a, A, R, F>
 where
     F: FnOnce<A, Output = R>,
 {
-    pub fn generate_log(&self, output_string: String) -> Result<String, Error> {
+    pub fn generate_log(&self, output: &Result<String, Error>) -> Result<String, Error> {
+
+        let handle_string = &self.logging_data.as_ref().context(CallableHandleStringMissing)?.handle;
+        let arguments_string = &self.logging_data.as_ref().context(CallableHandleStringMissing)?.arguments;
+        let default_output_string = String::new();
+        let output_string = output.as_ref().unwrap_or(&default_output_string);
+
         self.logging_format.context(CallableLoggingFormatMissing)?.iter().fold(
             Ok(String::new()),
             |accumulator_string, token| {
                 let intermediate_string = match token {
-                    LoggingFormatToken::Handle => {
-                        &self.logging_data.as_ref().context(CallableHandleStringMissing)?.handle
-                    }
-                    LoggingFormatToken::Args => {
-                        &self.logging_data.as_ref().context(CallableArgumentStringMissing)?.handle
-                    }
+                    LoggingFormatToken::Handle => handle_string,
+                    LoggingFormatToken::Args => arguments_string,
                     LoggingFormatToken::ArbitraryString(arbitrary_string) => arbitrary_string,
                     LoggingFormatToken::Output => &output_string,
                 };
