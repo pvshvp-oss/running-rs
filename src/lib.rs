@@ -46,7 +46,7 @@ pub trait RunAndCallback: RunAndReturn {
 pub trait RunAndReturn {
     type ReturnType;
 
-    fn run_and_return(&mut self) -> Result<Self::ReturnType, Box<dyn ErrorTrait>>;
+    fn run_and_return(&mut self) -> Result<Self::ReturnType, Error>;
 }
 
 /// Does what the [Run] trait does, but returns the

@@ -235,6 +235,50 @@ where
             Ok(inner) => inner,
             Err(_inner) => Box::new(CallablePanicked).fail()
         };
+        output.map_err(|error: CallableError| -> Error {
+            Box::new(error)
+        })
+    }
+}
+
+impl<A, R, F> RunAndReturn for Callable<A, R, F>
+where
+    F: FnMut<A, Output = R>,
+{
+    default fn run_and_return(&mut self) -> Result<Self::ReturnType, Error> {
+        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
+            let arguments: A = self
+                .arguments
+                .take().context(CallableArgumentsMissing)?;
+            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
+            Ok(handle.call_mut(arguments))
+        }));
+        let output = match output {
+            Ok(inner) => inner,
+            Err(_inner) => Box::new(CallablePanicked).fail()
+        };
+        output.map_err(|error| -> Error {
+            Box::new(error)
+        })
+    }
+}
+
+impl<A, R, F> RunAndReturn for Callable<A, R, F>
+where
+    F: Fn<A, Output = R>,
+{
+    fn run_and_return(&mut self) -> Result<Self::ReturnType, Error> {
+        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
+            let arguments: A = self
+                .arguments
+                .take().context(CallableArgumentsMissing)?;
+            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
+            Ok(handle.call(arguments))
+        }));
+        let output = match output {
+            Ok(inner) => inner,
+            Err(_inner) => Box::new(CallablePanicked).fail()
+        };
         output.map_err(|error| -> Error {
             Box::new(error)
         })
