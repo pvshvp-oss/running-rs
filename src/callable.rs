@@ -518,7 +518,7 @@ impl<'a, A, R, F> CallableOutputString<R> for LoggedCallable<'a, A, R, F>
 where
     F: FnOnce<A, Output = R>,
 {
-    default fn get_output_string(&self, callable_output: &R) -> String {
+    default fn get_output_string(&self, _callable_output: &R) -> String {
         return format!("");
     }
 }
