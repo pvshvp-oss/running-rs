@@ -489,7 +489,7 @@ impl<'a, A, R, F> LoggedCallable<'a, A, R, F>
 where
     F: FnOnce<A, Output = R>,
 {
-    pub fn generate_log(&self, output: &Result<String, Error>) -> Result<String, Error> {
+    pub fn generate_log(&self, output: &Result<R, Error>) -> Result<String, Error> {
 
         let handle_string = &self.logging_data.as_ref().context(CallableHandleStringMissing)?.handle;
         let arguments_string = &self.logging_data.as_ref().context(CallableHandleStringMissing)?.arguments;
