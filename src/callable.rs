@@ -513,7 +513,7 @@ where
 
     default fn run_and_return(&mut self) -> Result<Self::ReturnType, Error> {
         let result = self.callable.run_and_return();
-        self.generate_log(&result); // TODO: Use this to log
+        self.generate_log(&result)?; // TODO: Use this to log
         return result;
     }
 }
@@ -524,7 +524,7 @@ where
 {
     default fn run(&mut self) -> Result<(), Error> {
         let result = self.callable.run_and_return();
-        self.generate_log(&result); // TODO: Use this to log
+        self.generate_log(&result)?; // TODO: Use this to log
         return result.map(|_inner| ());
     }
 }
@@ -538,7 +538,7 @@ where
         callback: C,
     ) -> Result<(), Error> {
         let result = self.callable.run_and_return();
-        self.generate_log(&result); // TODO: Use this to log
+        self.generate_log(&result)?; // TODO: Use this to log
         match result {
             Ok(inner) => Ok(callback(inner)),
             Err(inner) => Err(inner),
@@ -553,7 +553,7 @@ where
 {
     fn run_and_debug(&mut self) -> Result<String, Error> {
         let result = self.callable.run_and_return();
-        self.generate_log(&result); // TODO: Use this to log
+        self.generate_log(&result)?; // TODO: Use this to log
         match result {
             Ok(inner) => Ok(format!("{:?}", inner)),
             Err(inner) => Err(inner),
@@ -568,7 +568,7 @@ where
 {
     fn run_and_display(&mut self) -> Result<String, Error> {
         let result = self.callable.run_and_return();
-        self.generate_log(&result); // TODO: Use this to log
+        self.generate_log(&result)?; // TODO: Use this to log
         match result {
             Ok(inner) => Ok(format!("{}", inner)),
             Err(inner) => Err(inner),
