@@ -64,7 +64,7 @@ pages:
   before_script:
     - cargo --version
   script:
-    - cargo doc
+    - cargo doc --document-private-items
     - rm -rf public/* # clear out old files
     - cp -r target/doc/. public/ # copy the web pages to the public directory
   allow_failure: false
