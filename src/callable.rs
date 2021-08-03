@@ -1,10 +1,11 @@
+#![macro_use]
+
 // region: IMPORTS
 
-use crate::generate_task_id;
 use crate::Error;
 use crate::Represent;
 use crate::{Run, RunAndCallback, RunAndDebug, RunAndDisplay, RunAndReturn};
-use snafu::{Backtrace, ErrorCompat, OptionExt, ResultExt, Snafu};
+use snafu::{Backtrace, OptionExt, Snafu};
 use std::any::Any;
 use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
@@ -27,8 +28,6 @@ pub enum CallableError {
     CallableHandleStringMissing { backtrace: Backtrace },
     #[snafu(display("Callable argument string missing. It is necessary for logging"))]
     CallableArgumentStringMissing { backtrace: Backtrace },
-    #[snafu(display("Callable logging format missing. It is necessary for logging"))]
-    CallableLoggingFormatMissing { backtrace: Backtrace },
 }
 
 impl From<CallableError> for Error {
@@ -38,86 +37,6 @@ impl From<CallableError> for Error {
 }
 
 // endregion: ERRORS
-
-// region: LOGGING INFO
-
-/// The logging data for a callable. Contains the string form of the callable's
-/// handle and the string form of its arguments
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde_support", derive(Serialize, Deserialize))]
-struct LoggingData {
-    handle: String,
-    arguments: String,
-}
-
-/// Represents one token within the format specification of a callable. The
-/// format specification may have the callable handle, its arguments, and
-/// arbitrary strings. Use the `new` and `append` methods to build up the format
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde_support", derive(Serialize, Deserialize))]
-pub enum LoggingFormatToken {
-    Handle,
-    Args,
-    Output,
-    ArbitraryString(String),
-}
-
-/// The logging format for a callable, in the format of an ordered list. Each
-/// item in the list is a [LoggingFormatToken]
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde_support", derive(Serialize, Deserialize))]
-pub struct LoggingFormat {
-    logging_format: Vec<LoggingFormatToken>,
-}
-
-pub type LoggingFormatBuilder = LoggingFormat;
-
-impl Deref for LoggingFormat {
-    type Target = Vec<LoggingFormatToken>;
-
-    fn deref(&self) -> &Self::Target {
-        return &self.logging_format;
-    }
-}
-
-impl DerefMut for LoggingFormat {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        return &mut self.logging_format;
-    }
-}
-
-impl LoggingFormat {
-    /// Create a new callable logging format with an empty list.
-    pub fn new() -> Self {
-        LoggingFormat { logging_format: Vec::new() }
-    }
-
-    /// Append the callable's handle to end of the format specification
-    pub fn append_handle(mut self) -> Self {
-        self.push(LoggingFormatToken::Handle);
-        return self;
-    }
-
-    /// Append the callable's arguments to the end of the format specification
-    pub fn append_args(mut self) -> Self {
-        self.push(LoggingFormatToken::Args);
-        return self;
-    }
-
-    /// Append the callable's output to the end of the format specification
-    pub fn append_output(mut self) -> Self {
-        self.push(LoggingFormatToken::Output);
-        return self;
-    }
-
-    /// Append an arbitrary string to the end of the format specification
-    pub fn append_string<S: Into<String>>(mut self, given_string: S) -> Self {
-        self.push(LoggingFormatToken::ArbitraryString(given_string.into()));
-        return self;
-    }
-}
-
-// endregion: LOGGING INFO
 
 // region: CALLABLE
 
@@ -153,22 +72,6 @@ pub type Function<A, R, F> = Callable<A, R, F>;
 pub type Method<A, R, F> = Callable<A, R, F>;
 pub type Closure<A, R, F> = Callable<A, R, F>;
 
-impl<A, R, F> Callable<A, R, F>
-where
-    F: FnOnce<A, Output = R>,
-{
-    fn compose_run_result(
-        call_result: Result<Result<R, CallableError>, Box<dyn Any + Send>>,
-    ) -> Result<R, Error> {
-        let result = match call_result {
-            Ok(inner) => inner,
-            Err(_inner) => CallablePanicked.fail().into(),
-        };
-        let result = result.map_err(|error: CallableError| -> Error { error.into() });
-        return result;
-    }
-}
-
 impl<A, R, F> Deref for Callable<A, R, F>
 where
     F: FnOnce<A, Output = R>,
@@ -189,53 +92,58 @@ where
     }
 }
 
-/// A trait that exists solely to specialize the implementation of `new` and
-/// `args` methods in `Callable` for the case of no arguments
-pub trait CallableCreate<
-    A, // arguments as a tuple
-    R, // return type
-    F, // Fn trait (like Fn, FnOnce, and FnMut)
-> where
-    F: FnOnce<A, Output = R>,
-{
-    fn new(handle: F) -> Self;
-    fn args(self: Self, arguments: A) -> Self;
+trait OptionalNullArgument<A> {
+    fn optional_null_argument(&self) -> Option<A>;
 }
 
-/// Implementation for a general callable
-impl<A, R, F> CallableCreate<A, R, F> for Callable<A, R, F>
+impl<A, R, F> OptionalNullArgument<A> for F
+where 
+    F: FnOnce<A, Output = R>,
+{
+    default fn optional_null_argument(&self) -> Option<A> {
+        return None;
+    }
+}
+
+impl<R, F> OptionalNullArgument<()> for F
+where 
+    F: FnOnce<(), Output = R>,
+{
+    fn optional_null_argument(&self) -> Option<()> {
+        return Some(());
+    }
+}
+
+impl<A, R, F> Callable<A, R, F>
 where
     F: FnOnce<A, Output = R>,
 {
     /// Creates a new callable with the given handle and no arguments
-    default fn new(handle: F) -> Self {
+    pub fn new(handle: F) -> Self {
         return Callable {
-            atomic_callable: AtomicCallable { handle: Some(handle), arguments: None },
+            atomic_callable: AtomicCallable {
+                arguments: handle.optional_null_argument(),
+                handle: Some(handle),
+            },
         };
     }
 
     /// Stores arguments in the callable
-    default fn args(mut self, arguments: A) -> Self {
+    pub fn args(mut self, arguments: A) -> Self {
         self.arguments = Some(arguments);
         return self;
     }
-}
 
-/// Implementation for a callable with a handle that indicates that it takes no
-/// arguments
-impl<R, F> CallableCreate<(), R, F> for Callable<(), R, F>
-where
-    F: FnOnce<(), Output = R>,
-{
-    fn new(handle: F) -> Self {
-        return Callable {
-            atomic_callable: AtomicCallable { handle: Some(handle), arguments: Some(()) },
+    /// Flattens the result of a callable call, and combines the errors generated by the callable panicking, and other errors of missing data
+    fn compose_run_result(
+        call_result: Result<Result<R, CallableError>, Box<dyn Any + Send>>,
+    ) -> Result<R, Error> {
+        let result = match call_result {
+            Ok(inner) => inner,
+            Err(_inner) => CallablePanicked.fail().into(),
         };
-    }
-
-    fn args(mut self, arguments: ()) -> Self {
-        self.arguments = Some(arguments);
-        return self;
+        let result = result.map_err(|error: CallableError| -> Error { error.into() });
+        return result;
     }
 }
 
@@ -380,6 +288,99 @@ where
 
 // endregion: CALLABLE
 
+// region: LOGGING INFO
+
+/// The logging data for a callable. Contains the string form of the callable's
+/// handle and the string form of its arguments
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde_support", derive(Serialize, Deserialize))]
+struct LoggingData {
+    handle: String,
+    arguments: String,
+}
+
+/// Represents one token within the format specification of a callable. The
+/// format specification may have the callable handle, its arguments, and
+/// arbitrary strings. Use the `new` and `append` methods to build up the format
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde_support", derive(Serialize, Deserialize))]
+pub enum LoggingFormatToken {
+    Handle,
+    Args,
+    Output,
+    ArbitraryString(String),
+}
+
+/// The logging format for a callable, in the format of an ordered list. Each
+/// item in the list is a [LoggingFormatToken]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde_support", derive(Serialize, Deserialize))]
+pub struct LoggingFormat {
+    logging_format: Vec<LoggingFormatToken>,
+}
+
+pub type LoggingFormatBuilder = LoggingFormat;
+
+impl Deref for LoggingFormat {
+    type Target = Vec<LoggingFormatToken>;
+
+    fn deref(&self) -> &Self::Target {
+        return &self.logging_format;
+    }
+}
+
+impl DerefMut for LoggingFormat {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        return &mut self.logging_format;
+    }
+}
+
+impl LoggingFormat {
+    /// Create a new callable logging format with an empty list.
+    pub fn new() -> Self {
+        LoggingFormat {
+            logging_format: Vec::new(),
+        }
+    }
+
+    /// Append the callable's handle to end of the format specification
+    pub fn append_handle(mut self) -> Self {
+        self.push(LoggingFormatToken::Handle);
+        return self;
+    }
+
+    /// Append the callable's arguments to the end of the format specification
+    pub fn append_args(mut self) -> Self {
+        self.push(LoggingFormatToken::Args);
+        return self;
+    }
+
+    /// Append the callable's output to the end of the format specification
+    pub fn append_output(mut self) -> Self {
+        self.push(LoggingFormatToken::Output);
+        return self;
+    }
+
+    /// Append an arbitrary string to the end of the format specification
+    pub fn append_string<S: Into<String>>(mut self, given_string: S) -> Self {
+        self.push(LoggingFormatToken::ArbitraryString(given_string.into()));
+        return self;
+    }
+}
+
+impl Default for LoggingFormat {
+    fn default() -> Self {
+        LoggingFormat::new()
+            .append_handle()
+            .append_string("(")
+            .append_args()
+            .append_string(") -> ")
+            .append_output()
+    }
+}
+
+// endregion: LOGGING INFO
+
 // region: LOGGED CALLABLE
 
 /// A struct denoting a logged callable object, like a function, method, or a
@@ -423,24 +424,12 @@ where
     }
 }
 
-/// A trait that exists solely to specialize the implementation of `new` and
-/// `args` methods in `LoggedCallable` for the case of no arguments
-pub trait LoggedCallableCreate<
-    A, // arguments as a tuple
-    R, // return type
-    F, // Fn trait (like Fn, FnOnce, and FnMut)
-> where
-    F: FnOnce<A, Output = R>,
-{
-    fn new<S: Into<String>>(handle: F, handle_string: S) -> Self;
-    fn args<S: Into<String>>(self: Self, arguments: A, arguments_string: S) -> Self;
-}
-
-impl<'a, A, R, F> LoggedCallableCreate<A, R, F> for LoggedCallable<'a, A, R, F>
+impl<'a, A, R, F> LoggedCallable<'a, A, R, F>
 where
     F: FnOnce<A, Output = R>,
 {
-    default fn new<S: Into<String>>(handle: F, handle_string: S) -> Self {
+
+    pub fn new<S: Into<String>>(handle: F, handle_string: S) -> Self {
         return LoggedCallable {
             callable: Callable::new(handle),
             logging_data: Some(LoggingData {
@@ -451,48 +440,34 @@ where
         };
     }
 
-    fn args<S: Into<String>>(mut self, arguments: A, arguments_string: S) -> Self {
+    pub fn args<S: Into<String>>(mut self, arguments: A, arguments_string: S) -> Self {
         self.arguments = Some(arguments);
         if let Some(mut logging_data_inner) = self.logging_data.as_mut() {
             logging_data_inner.arguments = arguments_string.into();
         }
         return self;
     }
-}
 
-impl<'a, R, F> LoggedCallableCreate<(), R, F> for LoggedCallable<'a, (), R, F>
-where
-    F: FnOnce<(), Output = R>,
-{
-    fn new<S: Into<String>>(handle: F, handle_string: S) -> Self {
-        return LoggedCallable {
-            callable: Callable::new(handle).args(()),
-            logging_data: Some(LoggingData {
-                handle: handle_string.into(),
-                arguments: String::from("()"),
-            }),
-            logging_format: None,
-        };
-    }
-}
-
-impl<'a, A, R, F> LoggedCallable<'a, A, R, F>
-where
-    F: FnOnce<A, Output = R>,
-{
-    pub fn generate_log(&self, result: &Result<R, Error>) -> Result<String, Error> {
-        let handle_string =
-            &self.logging_data.as_ref().context(CallableHandleStringMissing)?.handle;
-        let arguments_string =
-            &self.logging_data.as_ref().context(CallableHandleStringMissing)?.arguments;
+    fn generate_log(&self, result: &Result<R, Error>) -> Result<String, Error> {
+        let handle_string = &self
+            .logging_data
+            .as_ref()
+            .context(CallableHandleStringMissing)?
+            .handle;
+        let arguments_string = &self
+            .logging_data
+            .as_ref()
+            .context(CallableHandleStringMissing)?
+            .arguments;
         let output_string = match result.as_ref() {
             Ok(inner) => inner.represent(),
             Err(inner) => inner.represent(),
         };
 
-        self.logging_format.context(CallableLoggingFormatMissing)?.iter().fold(
-            Ok(String::new()),
-            |accumulator_string, token| {
+        self.logging_format
+            .unwrap_or(&LoggingFormat::default())
+            .iter()
+            .fold(Ok(String::new()), |accumulator_string, token| {
                 let intermediate_string = match token {
                     LoggingFormatToken::Handle => handle_string,
                     LoggingFormatToken::Args => arguments_string,
@@ -503,8 +478,7 @@ where
                     inner.push_str(intermediate_string);
                     inner
                 });
-            },
-        )
+            })
     }
 }
 
@@ -581,9 +555,44 @@ where
 
 // endregion: LOGGED CALLABLE
 
+// region: MACROS
+
+#[macro_export]
+macro_rules! callable{
+    ( $first_parent:ident $(:: $path_fragment_type_a:ident)* $(. $path_fragment_type_b:ident)* ( $($arguments:expr),* ) ) => {
+        {
+            use $crate::callable::Callable;
+            use $crate::callable::CallableCreate;
+
+            let callback = || -> _ {
+                $first_parent $(:: $path_fragment_type_a)* $(. $path_fragment_type_b)* ($($arguments),*)
+            };
+
+            Callable::new(callback).args(())
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! logged_callable{
+    ( $first_parent:ident $(:: $path_fragment_type_a:ident)* $(. $path_fragment_type_b:ident)* ( $($arguments:expr),* ) ) => {
+        {
+            use $crate::callable::LoggedCallable;
+            use $crate::callable::LoggedCallableCreate;
+
+            let callback = || -> _ {
+                $first_parent $(:: $path_fragment_type_a)* $(. $path_fragment_type_b)* ($($arguments),*)
+            };
+            $crate::Function::new(callback, stringify!($first_parent$(::$path_fragment_type_a)*$(.$path_fragment_type_b)*)).args((), stringify!($($arguments),*))
+        }
+    };
+}
+
+
+// endregion: MACROS
+
 #[cfg(test)]
 mod tests {
-    use futures::executor::block_on;
 
     use crate::tests::setup_logging;
 
@@ -597,17 +606,8 @@ mod tests {
         let mut callable = callable!(vector.pop());
         let output: Option<isize>;
 
-        #[cfg(feature = "async")]
-        {
-            block_on(callable.run());
-            output = callable.output.unwrap().unwrap();
-        }
-
-        #[cfg(not(feature = "async"))]
-        {
-            callable.run();
-            output = callable.output.unwrap().unwrap();
-        }
+        callable.run();
+        output = callable.output.unwrap().unwrap();
 
         println!("vector_pop() output: {:?}", output);
         assert_eq!(output, Some(6));
