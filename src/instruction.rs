@@ -99,55 +99,55 @@ use std::{
 
 // TESTS
 
-#[cfg(test)]
-mod tests {
+// #[cfg(test)]
+// mod tests {
 
-    // IMPORTS
+//     // IMPORTS
 
-    #[cfg(feature = "async")]
-    use tokio::runtime::Runtime;
+//     #[cfg(feature = "async")]
+//     use tokio::runtime::Runtime;
 
-    #[cfg(feature = "logging")]
-    use crate::tests::setup_logging;
+//     #[cfg(feature = "logging")]
+//     use crate::tests::setup_logging;
 
-    // TESTS
+//     // TESTS
 
-    #[test]
-    fn echo() {
-        #[cfg(feature = "logging")]
-        setup_logging(log::LevelFilter::Debug);
+//     #[test]
+//     fn echo() {
+//         #[cfg(feature = "logging")]
+//         setup_logging(log::LevelFilter::Debug);
 
-        #[cfg(feature = "async")]
-        {
-            let runtime = Runtime::new().unwrap();
-            let output: String = String::from_utf8(
-                runtime
-                    .block_on(async {
-                        super::Command::new("echo")
-                            .arg("Hello")
-                            .arg("World")
-                            .output()
-                            .await
-                    })
-                    .expect("Unable to run...")
-                    .stdout,
-            )
-            .expect("Unable to convert from utf-8 to String");
-            assert_eq!(output, String::from("Hello World\n"));
-        };
+//         #[cfg(feature = "async")]
+//         {
+//             let runtime = Runtime::new().unwrap();
+//             let output: String = String::from_utf8(
+//                 runtime
+//                     .block_on(async {
+//                         super::Command::new("echo")
+//                             .arg("Hello")
+//                             .arg("World")
+//                             .output()
+//                             .await
+//                     })
+//                     .expect("Unable to run...")
+//                     .stdout,
+//             )
+//             .expect("Unable to convert from utf-8 to String");
+//             assert_eq!(output, String::from("Hello World\n"));
+//         };
 
-        #[cfg(not(feature = "async"))]
-        {
-            let output: String = String::from_utf8(
-                super::Command::new("echo")
-                    .arg("Hello")
-                    .arg("World")
-                    .output()
-                    .expect("Unable to run...")
-                    .stdout,
-            )
-            .expect("Unable to convert from utf-8 to String");
-            assert_eq!(output, String::from("Hello World\n"));
-        };
-    }
-}
+//         #[cfg(not(feature = "async"))]
+//         {
+//             let output: String = String::from_utf8(
+//                 super::Command::new("echo")
+//                     .arg("Hello")
+//                     .arg("World")
+//                     .output()
+//                     .expect("Unable to run...")
+//                     .stdout,
+//             )
+//             .expect("Unable to convert from utf-8 to String");
+//             assert_eq!(output, String::from("Hello World\n"));
+//         };
+//     }
+// }

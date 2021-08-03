@@ -441,7 +441,7 @@ where
     }
 
     pub fn args<S: Into<String>>(mut self, arguments: A, arguments_string: S) -> Self {
-        self.arguments = Some(arguments);
+        self.callable = self.callable.args(arguments);
         if let Some(mut logging_data_inner) = self.logging_data.as_mut() {
             logging_data_inner.arguments = arguments_string.into();
         }
@@ -562,7 +562,6 @@ macro_rules! callable{
     ( $first_parent:ident $(:: $path_fragment_type_a:ident)* $(. $path_fragment_type_b:ident)* ( $($arguments:expr),* ) ) => {
         {
             use $crate::callable::Callable;
-            use $crate::callable::CallableCreate;
 
             let callback = || -> _ {
                 $first_parent $(:: $path_fragment_type_a)* $(. $path_fragment_type_b)* ($($arguments),*)
@@ -574,138 +573,180 @@ macro_rules! callable{
 }
 
 #[macro_export]
+macro_rules! function {
+    ($( $arg:expr ),*) => {
+        callable!($($arg)*);
+    };
+}
+
+#[macro_export]
+macro_rules! method {
+    ($( $arg:expr ),*) => {
+        callable!($($arg)*);
+    };
+}
+
+#[macro_export]
+macro_rules! closure {
+    ($( $arg:expr ),*) => {
+        callable!($($arg)*);
+    };
+}
+
+
+#[macro_export]
 macro_rules! logged_callable{
     ( $first_parent:ident $(:: $path_fragment_type_a:ident)* $(. $path_fragment_type_b:ident)* ( $($arguments:expr),* ) ) => {
         {
             use $crate::callable::LoggedCallable;
-            use $crate::callable::LoggedCallableCreate;
 
             let callback = || -> _ {
                 $first_parent $(:: $path_fragment_type_a)* $(. $path_fragment_type_b)* ($($arguments),*)
             };
-            $crate::Function::new(callback, stringify!($first_parent$(::$path_fragment_type_a)*$(.$path_fragment_type_b)*)).args((), stringify!($($arguments),*))
+            Callable::new(callback, stringify!($first_parent$(::$path_fragment_type_a)*$(.$path_fragment_type_b)*)).args((), stringify!($($arguments),*))
         }
+    };
+}
+
+#[macro_export]
+macro_rules! logged_function {
+    ($( $arg:expr ),*) => {
+        logged_callable!($($arg)*);
+    };
+}
+
+#[macro_export]
+macro_rules! logged_method {
+    ($( $arg:expr ),*) => {
+        logged_callable!($($arg)*);
+    };
+}
+
+#[macro_export]
+macro_rules! logged_closure {
+    ($( $arg:expr ),*) => {
+        logged_callable!($($arg)*);
     };
 }
 
 
 // endregion: MACROS
 
-#[cfg(test)]
-mod tests {
+// #[cfg(test)]
+// mod tests {
 
-    use crate::tests::setup_logging;
+//     use crate::tests::setup_logging;
 
-    // TESTS
+//     // TESTS
 
-    #[test]
-    fn vector_pop() {
-        setup_logging(log::LevelFilter::Debug);
+//     #[test]
+//     fn vector_pop() {
+//         setup_logging(log::LevelFilter::Debug);
 
-        let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5, 6];
-        let mut callable = callable!(vector.pop());
-        let output: Option<isize>;
+//         let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5, 6];
+//         let mut callable = callable!(vector.pop());
+//         let output: Option<isize>;
 
-        callable.run();
-        output = callable.output.unwrap().unwrap();
+//         callable.run();
+//         output = callable.output.unwrap().unwrap();
 
-        println!("vector_pop() output: {:?}", output);
-        assert_eq!(output, Some(6));
-        assert_eq!(vector, [1, 2, 3, 4, 5]);
-    }
+//         println!("vector_pop() output: {:?}", output);
+//         assert_eq!(output, Some(6));
+//         assert_eq!(vector, [1, 2, 3, 4, 5]);
+//     }
 
-    #[test]
-    fn vector_push() {
-        #[cfg(feature = "logging")]
-        setup_logging(log::LevelFilter::Debug);
+//     #[test]
+//     fn vector_push() {
+//         #[cfg(feature = "logging")]
+//         setup_logging(log::LevelFilter::Debug);
 
-        let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5];
-        let mut callable = callable!(vector.push(7));
-        let output: ();
+//         let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5];
+//         let mut callable = callable!(vector.push(7));
+//         let output: ();
 
-        #[cfg(feature = "async")]
-        {
-            block_on(callable.run());
-            output = callable.output.unwrap().unwrap();
-        }
+//         #[cfg(feature = "async")]
+//         {
+//             block_on(callable.run());
+//             output = callable.output.unwrap().unwrap();
+//         }
 
-        #[cfg(not(feature = "async"))]
-        {
-            callable.run();
-            output = callable.output.unwrap().unwrap();
-        }
+//         #[cfg(not(feature = "async"))]
+//         {
+//             callable.run();
+//             output = callable.output.unwrap().unwrap();
+//         }
 
-        println!("vector_push() output: {:?}", output);
-        assert_eq!(output, ());
-        assert_eq!(vector, [1, 2, 3, 4, 5, 7]);
-    }
+//         println!("vector_push() output: {:?}", output);
+//         assert_eq!(output, ());
+//         assert_eq!(vector, [1, 2, 3, 4, 5, 7]);
+//     }
 
-    #[test]
-    fn vector_pop_and_push() {
-        #[cfg(feature = "logging")]
-        setup_logging(log::LevelFilter::Debug);
+//     #[test]
+//     fn vector_pop_and_push() {
+//         #[cfg(feature = "logging")]
+//         setup_logging(log::LevelFilter::Debug);
 
-        let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5, 6];
-        let mut callable = callable!(vector.pop());
-        let output: Option<isize>;
+//         let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5, 6];
+//         let mut callable = callable!(vector.pop());
+//         let output: Option<isize>;
 
-        #[cfg(feature = "async")]
-        {
-            block_on(callable.run());
-            output = callable.output.unwrap().unwrap();
-        }
+//         #[cfg(feature = "async")]
+//         {
+//             block_on(callable.run());
+//             output = callable.output.unwrap().unwrap();
+//         }
 
-        #[cfg(not(feature = "async"))]
-        {
-            callable.run();
-            output = callable.output.unwrap().unwrap();
-        }
+//         #[cfg(not(feature = "async"))]
+//         {
+//             callable.run();
+//             output = callable.output.unwrap().unwrap();
+//         }
 
-        println!("vector_pop() output: {:?}", output);
-        assert_eq!(output, Some(6));
-        assert_eq!(vector, [1, 2, 3, 4, 5]);
+//         println!("vector_pop() output: {:?}", output);
+//         assert_eq!(output, Some(6));
+//         assert_eq!(vector, [1, 2, 3, 4, 5]);
 
-        let mut callable = callable!(vector.push(7));
-        let output: ();
+//         let mut callable = callable!(vector.push(7));
+//         let output: ();
 
-        #[cfg(feature = "async")]
-        {
-            block_on(callable.run());
-            output = callable.output.unwrap().unwrap();
-        }
+//         #[cfg(feature = "async")]
+//         {
+//             block_on(callable.run());
+//             output = callable.output.unwrap().unwrap();
+//         }
 
-        #[cfg(not(feature = "async"))]
-        {
-            callable.run();
-            output = callable.output.unwrap().unwrap();
-        }
+//         #[cfg(not(feature = "async"))]
+//         {
+//             callable.run();
+//             output = callable.output.unwrap().unwrap();
+//         }
 
-        println!("vector_push() output: {:?}", output);
-        assert_eq!(output, ());
-        assert_eq!(vector, [1, 2, 3, 4, 5, 7]);
-    }
+//         println!("vector_push() output: {:?}", output);
+//         assert_eq!(output, ());
+//         assert_eq!(vector, [1, 2, 3, 4, 5, 7]);
+//     }
 
-    #[test]
-    #[should_panic]
-    fn panic() {
-        let panicking_closure = || {
-            panic!("Panicking test...");
-        };
-        let mut callable = callable!(panicking_closure());
+//     #[test]
+//     #[should_panic]
+//     fn panic() {
+//         let panicking_closure = || {
+//             panic!("Panicking test...");
+//         };
+//         let mut callable = callable!(panicking_closure());
 
-        #[cfg(feature = "async")]
-        block_on(callable.run());
+//         #[cfg(feature = "async")]
+//         block_on(callable.run());
 
-        #[cfg(not(feature = "async"))]
-        callable.run();
+//         #[cfg(not(feature = "async"))]
+//         callable.run();
 
-        callable.output.unwrap().unwrap();
-    }
+//         callable.output.unwrap().unwrap();
+//     }
 
-    #[test]
-    #[cfg(feature = "logging")]
-    fn try_string_from() {
-        let value: isize = 5;
-        assert_eq!(String::from("5"), crate::try_string_from(&value).unwrap())
-    }
-}
+//     #[test]
+//     #[cfg(feature = "logging")]
+//     fn try_string_from() {
+//         let value: isize = 5;
+//         assert_eq!(String::from("5"), crate::try_string_from(&value).unwrap())
+//     }
+// }
