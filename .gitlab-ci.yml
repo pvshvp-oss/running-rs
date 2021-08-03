@@ -31,6 +31,7 @@ test-code:
     - cargo test
     - cargo install cargo-tarpaulin
     - cargo tarpaulin --ignore-tests
+  allow_failure: false
   artifacts:
     paths:
       - builds
@@ -66,7 +67,7 @@ pages:
     - cargo doc
     - rm -rf public/* # clear out old files
     - cp -r target/doc/. public/ # copy the web pages to the public directory
-  allow_failure: true
+  allow_failure: false
   artifacts:
     paths:
     - public
