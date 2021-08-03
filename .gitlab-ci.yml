@@ -16,8 +16,7 @@
 #   - apt-get install -yqq --no-install-recommends build-essential
 
 stages:
-  - test
-  - document
+  - common
 
 test-code:
   stage: common
