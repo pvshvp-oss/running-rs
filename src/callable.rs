@@ -464,7 +464,7 @@ where
 {
     fn new<S: Into<String>>(handle: F, handle_string: S) -> Self {
         return LoggedCallable {
-            callable: Callable::new(handle),
+            callable: Callable::new(handle).args(()),
             logging_data: Some(LoggingData {
                 handle: handle_string.into(),
                 arguments: String::from("()"),
@@ -575,69 +575,6 @@ where
         }
     }
 }
-
-// impl<'a, A, R, F> Runnable for LoggedCallable<'a, A, R, F>
-// where
-//     F: FnOnce<A, Output = R>,
-// {
-//     default fn run(&mut self) {
-//         let output = panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-//             let arguments = self.arguments.take().expect(
-//                 "Arguments not provided or are not in the valid
-// format...",
-//             );
-//             let handle = self.handle.take().expect(
-//                 "Handle not
-// provided or is moved...",
-//             );
-//             handle.call_once(arguments)
-//         }));
-//         self.generate_log();
-//         self.output = Some(output);
-//     }
-// }
-
-// impl<'a, A, R, F> Runnable for LoggedCallable<'a, A, R, F>
-// where
-//     F: FnMut<A, Output = R>,
-// {
-//     default fn run(&mut self) {
-//         let output = panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-//             let arguments = self.arguments.take().expect(
-//                 "Arguments not provided or are not in the valid
-// format...",
-//             );
-//             let handle = self.handle.as_mut().expect(
-//                 "Handle not
-// provided or is moved...",
-//             );
-//             handle.call_mut(arguments)
-//         }));
-//         self.generate_log();
-//         self.output = Some(output);
-//     }
-// }
-
-// impl<'a, A, R, F> Runnable for LoggedCallable<'a, A, R, F>
-// where
-//     F: Fn<A, Output = R>,
-// {
-//     fn run(&mut self) {
-//         let output = panic::catch_unwind::<_, R>(AssertUnwindSafe(|| {
-//             let arguments = self.arguments.take().expect(
-//                 "Arguments not provided or are not in the valid
-// format...",
-//             );
-//             let handle = self.handle.as_mut().expect(
-//                 "Handle not
-// provided or is moved...",
-//             );
-//             handle.call(arguments)
-//         }));
-//         self.generate_log();
-//         self.output = Some(output);
-//     }
-// }
 
 // endregion: LOGGED CALLABLE
 
