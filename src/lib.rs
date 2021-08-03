@@ -13,10 +13,10 @@ use snafu::ResultExt;
 use std::fmt::{Debug, Display};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-mod callable; // for types and traits pertaining to the execution of functions and closures
-mod instruction; /* for types and traits pertaining to the execution of programs, scripts, and
+pub mod callable; // for types and traits pertaining to the execution of functions and closures
+pub mod instruction; /* for types and traits pertaining to the execution of programs, scripts, and
                   * operating system commands */
-mod runnable; // for types and traits pertaining to the execution of a batch of callables and
+pub mod runnable; // for types and traits pertaining to the execution of a batch of callables and
               // commands
 
 pub trait ErrorTrait: std::error::Error + snafu::ErrorCompat {}

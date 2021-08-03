@@ -20,7 +20,7 @@ stages:
   - document
 
 test-code:
-  stage: test
+  stage: common
   image: rustlang/rust:nightly
   before_script:
     - rustc --version 
@@ -36,28 +36,30 @@ test-code:
     paths:
       - builds
 
-# lint-code:
-#   stage: test
-#   image: rustlang/rust:nightly
-#   before_script:
-#     - cargo --version
-#   script:
-#     - rustup component add rustfmt
-#     - cargo fmt -- --check
-#     - rustup component add clippy
-#     - cargo clippy -- -D warnings
+lint-code:
+  stage: common
+  image: rustlang/rust:nightly
+  before_script:
+    - cargo --version
+  script:
+    - rustup component add rustfmt
+    - cargo fmt -- --check
+    - rustup component add clippy
+    - cargo clippy -- -D warnings
+  allow_failure: true
 
-# audit-code:
-#   stage: test
-#   image: rustlang/rust:nightly
-#   before_script:
-#     - cargo --version
-#   script:
-#     - cargo install cargo-audit
-#     - cargo audit
+audit-code:
+  stage: common
+  image: rustlang/rust:nightly
+  before_script:
+    - cargo --version
+  script:
+    - cargo install cargo-audit
+    - cargo audit
+  allow_failure: true
 
 pages:
-  stage: document
+  stage: common
   image: rustlang/rust:nightly
   before_script:
     - cargo --version

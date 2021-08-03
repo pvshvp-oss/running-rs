@@ -632,6 +632,8 @@ macro_rules! logged_closure {
 
 // endregion: MACROS
 
+// region: TESTS
+
 // #[cfg(test)]
 // mod tests {
 
@@ -750,3 +752,5 @@ macro_rules! logged_closure {
 //         assert_eq!(String::from("5"), crate::try_string_from(&value).unwrap())
 //     }
 // }
+
+// endregion: TESTS
