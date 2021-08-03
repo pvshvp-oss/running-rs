@@ -6,7 +6,7 @@ A library for running tasks (functions/closures or operating system commands).
 
 ## Documentation
 
-The API documentation can be found [here](https://shivanandvp.gitlab.io/running-rs/running_rs/index.html)
+The API documentation can be found [here](https://shivanandvp.gitlab.io/running-rs/running/index.html)
 
 ## License
 
