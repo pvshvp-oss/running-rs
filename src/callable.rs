@@ -1,8 +1,8 @@
 // region: IMPORTS
 
-use crate::Represent;
 use crate::generate_task_id;
 use crate::Error;
+use crate::Represent;
 use crate::{Run, RunAndCallback, RunAndDebug, RunAndDisplay, RunAndReturn};
 use snafu::{Backtrace, ErrorCompat, OptionExt, ResultExt, Snafu};
 use std::any::Any;
@@ -157,7 +157,9 @@ impl<A, R, F> Callable<A, R, F>
 where
     F: FnOnce<A, Output = R>,
 {
-    fn compose_run_result(call_result: Result<Result<R, CallableError>, Box<dyn Any + Send>>) -> Result<R, Error> {
+    fn compose_run_result(
+        call_result: Result<Result<R, CallableError>, Box<dyn Any + Send>>,
+    ) -> Result<R, Error> {
         let result = match call_result {
             Ok(inner) => inner,
             Err(_inner) => CallablePanicked.fail().into(),
@@ -239,7 +241,7 @@ where
 
 trait InnerRunOnce<A, R, F>
 where
-    F: FnOnce<A, Output = R>
+    F: FnOnce<A, Output = R>,
 {
     fn inner_run_once(&mut self) -> Result<Result<R, CallableError>, Box<dyn Any + Send>>;
 }
@@ -259,7 +261,7 @@ where
 
 trait InnerRunMut<A, R, F>
 where
-    F: FnMut<A, Output = R>
+    F: FnMut<A, Output = R>,
 {
     fn inner_run_mut(&mut self) -> Result<Result<R, CallableError>, Box<dyn Any + Send>>;
 }
@@ -279,7 +281,7 @@ where
 
 trait InnerRun<A, R, F>
 where
-    F: Fn<A, Output = R>
+    F: Fn<A, Output = R>,
 {
     fn inner_run(&mut self) -> Result<Result<R, CallableError>, Box<dyn Any + Send>>;
 }
@@ -479,9 +481,10 @@ where
     F: FnOnce<A, Output = R>,
 {
     pub fn generate_log(&self, result: &Result<R, Error>) -> Result<String, Error> {
-
-        let handle_string = &self.logging_data.as_ref().context(CallableHandleStringMissing)?.handle;
-        let arguments_string = &self.logging_data.as_ref().context(CallableHandleStringMissing)?.arguments;
+        let handle_string =
+            &self.logging_data.as_ref().context(CallableHandleStringMissing)?.handle;
+        let arguments_string =
+            &self.logging_data.as_ref().context(CallableHandleStringMissing)?.arguments;
         let output_string = match result.as_ref() {
             Ok(inner) => inner.represent(),
             Err(inner) => inner.represent(),
@@ -578,131 +581,131 @@ where
 
 // endregion: LOGGED CALLABLE
 
-// #[cfg(test)]
-// mod tests {
-//     use futures::executor::block_on;
+#[cfg(test)]
+mod tests {
+    use futures::executor::block_on;
 
-//     use crate::tests::setup_logging;
+    use crate::tests::setup_logging;
 
-//     // TESTS
+    // TESTS
 
-//     #[test]
-//     fn vector_pop() {
-//         setup_logging(log::LevelFilter::Debug);
+    #[test]
+    fn vector_pop() {
+        setup_logging(log::LevelFilter::Debug);
 
-//         let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5, 6];
-//         let mut callable = callable!(vector.pop());
-//         let output: Option<isize>;
+        let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5, 6];
+        let mut callable = callable!(vector.pop());
+        let output: Option<isize>;
 
-//         #[cfg(feature = "async")]
-//         {
-//             block_on(callable.run());
-//             output = callable.output.unwrap().unwrap();
-//         }
+        #[cfg(feature = "async")]
+        {
+            block_on(callable.run());
+            output = callable.output.unwrap().unwrap();
+        }
 
-//         #[cfg(not(feature = "async"))]
-//         {
-//             callable.run();
-//             output = callable.output.unwrap().unwrap();
-//         }
+        #[cfg(not(feature = "async"))]
+        {
+            callable.run();
+            output = callable.output.unwrap().unwrap();
+        }
 
-//         println!("vector_pop() output: {:?}", output);
-//         assert_eq!(output, Some(6));
-//         assert_eq!(vector, [1, 2, 3, 4, 5]);
-//     }
+        println!("vector_pop() output: {:?}", output);
+        assert_eq!(output, Some(6));
+        assert_eq!(vector, [1, 2, 3, 4, 5]);
+    }
 
-//     #[test]
-//     fn vector_push() {
-//         #[cfg(feature = "logging")]
-//         setup_logging(log::LevelFilter::Debug);
+    #[test]
+    fn vector_push() {
+        #[cfg(feature = "logging")]
+        setup_logging(log::LevelFilter::Debug);
 
-//         let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5];
-//         let mut callable = callable!(vector.push(7));
-//         let output: ();
+        let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5];
+        let mut callable = callable!(vector.push(7));
+        let output: ();
 
-//         #[cfg(feature = "async")]
-//         {
-//             block_on(callable.run());
-//             output = callable.output.unwrap().unwrap();
-//         }
+        #[cfg(feature = "async")]
+        {
+            block_on(callable.run());
+            output = callable.output.unwrap().unwrap();
+        }
 
-//         #[cfg(not(feature = "async"))]
-//         {
-//             callable.run();
-//             output = callable.output.unwrap().unwrap();
-//         }
+        #[cfg(not(feature = "async"))]
+        {
+            callable.run();
+            output = callable.output.unwrap().unwrap();
+        }
 
-//         println!("vector_push() output: {:?}", output);
-//         assert_eq!(output, ());
-//         assert_eq!(vector, [1, 2, 3, 4, 5, 7]);
-//     }
+        println!("vector_push() output: {:?}", output);
+        assert_eq!(output, ());
+        assert_eq!(vector, [1, 2, 3, 4, 5, 7]);
+    }
 
-//     #[test]
-//     fn vector_pop_and_push() {
-//         #[cfg(feature = "logging")]
-//         setup_logging(log::LevelFilter::Debug);
+    #[test]
+    fn vector_pop_and_push() {
+        #[cfg(feature = "logging")]
+        setup_logging(log::LevelFilter::Debug);
 
-//         let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5, 6];
-//         let mut callable = callable!(vector.pop());
-//         let output: Option<isize>;
+        let mut vector: Vec<isize> = vec![1, 2, 3, 4, 5, 6];
+        let mut callable = callable!(vector.pop());
+        let output: Option<isize>;
 
-//         #[cfg(feature = "async")]
-//         {
-//             block_on(callable.run());
-//             output = callable.output.unwrap().unwrap();
-//         }
+        #[cfg(feature = "async")]
+        {
+            block_on(callable.run());
+            output = callable.output.unwrap().unwrap();
+        }
 
-//         #[cfg(not(feature = "async"))]
-//         {
-//             callable.run();
-//             output = callable.output.unwrap().unwrap();
-//         }
+        #[cfg(not(feature = "async"))]
+        {
+            callable.run();
+            output = callable.output.unwrap().unwrap();
+        }
 
-//         println!("vector_pop() output: {:?}", output);
-//         assert_eq!(output, Some(6));
-//         assert_eq!(vector, [1, 2, 3, 4, 5]);
+        println!("vector_pop() output: {:?}", output);
+        assert_eq!(output, Some(6));
+        assert_eq!(vector, [1, 2, 3, 4, 5]);
 
-//         let mut callable = callable!(vector.push(7));
-//         let output: ();
+        let mut callable = callable!(vector.push(7));
+        let output: ();
 
-//         #[cfg(feature = "async")]
-//         {
-//             block_on(callable.run());
-//             output = callable.output.unwrap().unwrap();
-//         }
+        #[cfg(feature = "async")]
+        {
+            block_on(callable.run());
+            output = callable.output.unwrap().unwrap();
+        }
 
-//         #[cfg(not(feature = "async"))]
-//         {
-//             callable.run();
-//             output = callable.output.unwrap().unwrap();
-//         }
+        #[cfg(not(feature = "async"))]
+        {
+            callable.run();
+            output = callable.output.unwrap().unwrap();
+        }
 
-//         println!("vector_push() output: {:?}", output);
-//         assert_eq!(output, ());
-//         assert_eq!(vector, [1, 2, 3, 4, 5, 7]);
-//     }
+        println!("vector_push() output: {:?}", output);
+        assert_eq!(output, ());
+        assert_eq!(vector, [1, 2, 3, 4, 5, 7]);
+    }
 
-//     #[test]
-//     #[should_panic]
-//     fn panic() {
-//         let panicking_closure = || {
-//             panic!("Panicking test...");
-//         };
-//         let mut callable = callable!(panicking_closure());
+    #[test]
+    #[should_panic]
+    fn panic() {
+        let panicking_closure = || {
+            panic!("Panicking test...");
+        };
+        let mut callable = callable!(panicking_closure());
 
-//         #[cfg(feature = "async")]
-//         block_on(callable.run());
+        #[cfg(feature = "async")]
+        block_on(callable.run());
 
-//         #[cfg(not(feature = "async"))]
-//         callable.run();
+        #[cfg(not(feature = "async"))]
+        callable.run();
 
-//         callable.output.unwrap().unwrap();
-//     }
+        callable.output.unwrap().unwrap();
+    }
 
-//     #[test]
-//     #[cfg(feature = "logging")]
-//     fn try_string_from() {
-//         let value: isize = 5;
-//         assert_eq!(String::from("5"),
-// crate::try_string_from(&value).unwrap())     }
-// }
+    #[test]
+    #[cfg(feature = "logging")]
+    fn try_string_from() {
+        let value: isize = 5;
+        assert_eq!(String::from("5"), crate::try_string_from(&value).unwrap())
+    }
+}
