@@ -36,25 +36,25 @@ test-code:
     paths:
       - builds
 
-lint-code:
-  stage: test
-  image: rustlang/rust:nightly
-  before_script:
-    - cargo --version
-  script:
-    - rustup component add rustfmt
-    - cargo fmt -- --check
-    - rustup component add clippy
-    - cargo clippy -- -D warnings
+# lint-code:
+#   stage: test
+#   image: rustlang/rust:nightly
+#   before_script:
+#     - cargo --version
+#   script:
+#     - rustup component add rustfmt
+#     - cargo fmt -- --check
+#     - rustup component add clippy
+#     - cargo clippy -- -D warnings
 
-audit-code:
-  stage: test
-  image: rustlang/rust:nightly
-  before_script:
-    - cargo --version
-  script:
-    - cargo install cargo-audit
-    - cargo audit
+# audit-code:
+#   stage: test
+#   image: rustlang/rust:nightly
+#   before_script:
+#     - cargo --version
+#   script:
+#     - cargo install cargo-audit
+#     - cargo audit
 
 pages:
   stage: document
