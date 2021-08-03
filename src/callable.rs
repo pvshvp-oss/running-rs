@@ -1,5 +1,6 @@
 // region: IMPORTS
 
+use crate::Represent;
 use crate::generate_task_id;
 use crate::Error;
 use crate::{Run, RunAndCallback, RunAndDebug, RunAndDisplay, RunAndReturn};
@@ -134,19 +135,6 @@ pub struct AtomicCallable<
     arguments: Option<A>, // a tuple representing the arguments
 }
 
-/// A trait that exists solely to specialize the implementation of `new` and
-/// `args` methods in `Callable` for the case of no arguments
-pub trait CallableCreate<
-    A, // arguments as a tuple
-    R, // return type
-    F, // Fn trait (like Fn, FnOnce, and FnMut)
-> where
-    F: FnOnce<A, Output = R>,
-{
-    fn new(self: Self, handle: F) -> Self;
-    fn args(self: Self, arguments: A) -> Self;
-}
-
 /// A struct denoting a callable object, like a function, method, or a closure
 /// that implements one of Fn, FnOnce or FnMut.
 #[derive(Debug, Clone)]
@@ -164,6 +152,20 @@ pub struct Callable<
 pub type Function<A, R, F> = Callable<A, R, F>;
 pub type Method<A, R, F> = Callable<A, R, F>;
 pub type Closure<A, R, F> = Callable<A, R, F>;
+
+impl<A, R, F> Callable<A, R, F>
+where
+    F: FnOnce<A, Output = R>,
+{
+    fn compose_run_result(call_result: Result<Result<R, CallableError>, Box<dyn Any + Send>>) -> Result<R, Error> {
+        let result = match call_result {
+            Ok(inner) => inner,
+            Err(_inner) => CallablePanicked.fail().into(),
+        };
+        let result = result.map_err(|error: CallableError| -> Error { error.into() });
+        return result;
+    }
+}
 
 impl<A, R, F> Deref for Callable<A, R, F>
 where
@@ -185,13 +187,26 @@ where
     }
 }
 
+/// A trait that exists solely to specialize the implementation of `new` and
+/// `args` methods in `Callable` for the case of no arguments
+pub trait CallableCreate<
+    A, // arguments as a tuple
+    R, // return type
+    F, // Fn trait (like Fn, FnOnce, and FnMut)
+> where
+    F: FnOnce<A, Output = R>,
+{
+    fn new(handle: F) -> Self;
+    fn args(self: Self, arguments: A) -> Self;
+}
+
 /// Implementation for a general callable
 impl<A, R, F> CallableCreate<A, R, F> for Callable<A, R, F>
 where
     F: FnOnce<A, Output = R>,
 {
     /// Creates a new callable with the given handle and no arguments
-    default fn new(self, handle: F) -> Self {
+    default fn new(handle: F) -> Self {
         return Callable {
             atomic_callable: AtomicCallable { handle: Some(handle), arguments: None },
         };
@@ -210,7 +225,7 @@ impl<R, F> CallableCreate<(), R, F> for Callable<(), R, F>
 where
     F: FnOnce<(), Output = R>,
 {
-    fn new(self, handle: F) -> Self {
+    fn new(handle: F) -> Self {
         return Callable {
             atomic_callable: AtomicCallable { handle: Some(handle), arguments: Some(()) },
         };
@@ -222,6 +237,66 @@ where
     }
 }
 
+trait InnerRunOnce<A, R, F>
+where
+    F: FnOnce<A, Output = R>
+{
+    fn inner_run_once(&mut self) -> Result<Result<R, CallableError>, Box<dyn Any + Send>>;
+}
+
+impl<A, R, F> InnerRunOnce<A, R, F> for Callable<A, R, F>
+where
+    F: FnOnce<A, Output = R>,
+{
+    fn inner_run_once(&mut self) -> Result<Result<R, CallableError>, Box<dyn Any + Send>> {
+        return panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
+            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
+            let handle: F = self.handle.take().context(CallableHandleMissing)?;
+            Ok(handle.call_once(arguments))
+        }));
+    }
+}
+
+trait InnerRunMut<A, R, F>
+where
+    F: FnMut<A, Output = R>
+{
+    fn inner_run_mut(&mut self) -> Result<Result<R, CallableError>, Box<dyn Any + Send>>;
+}
+
+impl<A, R, F> InnerRunMut<A, R, F> for Callable<A, R, F>
+where
+    F: FnMut<A, Output = R>,
+{
+    fn inner_run_mut(&mut self) -> Result<Result<R, CallableError>, Box<dyn Any + Send>> {
+        return panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
+            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
+            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
+            Ok(handle.call_mut(arguments))
+        }));
+    }
+}
+
+trait InnerRun<A, R, F>
+where
+    F: Fn<A, Output = R>
+{
+    fn inner_run(&mut self) -> Result<Result<R, CallableError>, Box<dyn Any + Send>>;
+}
+
+impl<A, R, F> InnerRun<A, R, F> for Callable<A, R, F>
+where
+    F: Fn<A, Output = R>,
+{
+    fn inner_run(&mut self) -> Result<Result<R, CallableError>, Box<dyn Any + Send>> {
+        return panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
+            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
+            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
+            Ok(handle.call(arguments))
+        }));
+    }
+}
+
 impl<A, R, F> RunAndReturn for Callable<A, R, F>
 where
     F: FnOnce<A, Output = R>,
@@ -229,16 +304,7 @@ where
     type ReturnType = R;
 
     default fn run_and_return(&mut self) -> Result<Self::ReturnType, Error> {
-        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
-            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
-            let handle: F = self.handle.take().context(CallableHandleMissing)?;
-            Ok(handle.call_once(arguments))
-        }));
-        let output = match output {
-            Ok(inner) => inner,
-            Err(_inner) => CallablePanicked.fail().into(),
-        };
-        output.map_err(|error: CallableError| -> Error { error.into() })
+        return Callable::<A, R, F>::compose_run_result(self.inner_run_once());
     }
 }
 
@@ -247,16 +313,7 @@ where
     F: FnMut<A, Output = R>,
 {
     default fn run_and_return(&mut self) -> Result<Self::ReturnType, Error> {
-        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
-            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
-            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
-            Ok(handle.call_mut(arguments))
-        }));
-        let output = match output {
-            Ok(inner) => inner,
-            Err(_inner) => CallablePanicked.fail().into(),
-        };
-        output.map_err(|error| -> Error { error.into() })
+        return Callable::<A, R, F>::compose_run_result(self.inner_run_mut());
     }
 }
 
@@ -265,16 +322,7 @@ where
     F: Fn<A, Output = R>,
 {
     fn run_and_return(&mut self) -> Result<Self::ReturnType, Error> {
-        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
-            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
-            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
-            Ok(handle.call(arguments))
-        }));
-        let output = match output {
-            Ok(inner) => inner,
-            Err(_inner) => CallablePanicked.fail().into(),
-        };
-        output.map_err(|error| -> Error { error.into() })
+        return Callable::<A, R, F>::compose_run_result(self.inner_run());
     }
 }
 
@@ -283,52 +331,7 @@ where
     F: FnOnce<A, Output = R>,
 {
     default fn run(&mut self) -> Result<(), Error> {
-        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
-            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
-            let handle: F = self.handle.take().context(CallableHandleMissing)?;
-            Ok(handle.call_once(arguments))
-        }));
-        let output = match output {
-            Ok(inner) => inner,
-            Err(_inner) => CallablePanicked.fail().into(),
-        };
-        output.map_err(|error: CallableError| -> Error { error.into() }).map(|_inner| ())
-    }
-}
-
-impl<A, R, F> Run for Callable<A, R, F>
-where
-    F: FnMut<A, Output = R>,
-{
-    default fn run(&mut self) -> Result<(), Error> {
-        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
-            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
-            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
-            Ok(handle.call_mut(arguments))
-        }));
-        let output = match output {
-            Ok(inner) => inner,
-            Err(_inner) => CallablePanicked.fail().into(),
-        };
-        output.map_err(|error| -> Error { error.into() }).map(|_inner| ())
-    }
-}
-
-impl<A, R, F> Run for Callable<A, R, F>
-where
-    F: Fn<A, Output = R>,
-{
-    fn run(&mut self) -> Result<(), Error> {
-        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
-            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
-            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
-            Ok(handle.call(arguments))
-        }));
-        let output = match output {
-            Ok(inner) => inner,
-            Err(_inner) => CallablePanicked.fail().into(),
-        };
-        output.map_err(|error| -> Error { error.into() }).map(|_inner| ())
+        return self.run_and_return().map(|_inner| ());
     }
 }
 
@@ -377,25 +380,6 @@ where
 
 // region: LOGGED CALLABLE
 
-/// A trait that exists solely to specialize the implementation of `new` and
-/// `args` methods in `LoggedCallable` for the case of no arguments
-pub trait LoggedCallableCreate<
-    A, // arguments as a tuple
-    R, // return type
-    F, // Fn trait (like Fn, FnOnce, and FnMut)
-> where
-    F: FnOnce<A, Output = R>,
-{
-    fn new<S: Into<String>>(self: Self, handle: F, handle_string: S) -> Self;
-    fn args<S: Into<String>>(self: Self, arguments: A, arguments_string: S) -> Self;
-}
-
-/// A trait that exists solely to specialize the display of the callable output
-/// when the return type implements Debug or Display
-trait CallableOutputString<R> {
-    fn get_output_string(&self, callable_output: &R) -> String;
-}
-
 /// A struct denoting a logged callable object, like a function, method, or a
 /// closure that implements one of Fn, FnOnce or FnMut.
 #[derive(Debug, Clone)]
@@ -408,7 +392,7 @@ pub struct LoggedCallable<
 > where
     F: FnOnce<A, Output = R>,
 {
-    atomic_callable: AtomicCallable<A, R, F>,
+    callable: Callable<A, R, F>,
     logging_data: Option<LoggingData>,
     logging_format: Option<&'a LoggingFormat>,
 }
@@ -421,10 +405,10 @@ impl<'a, A, R, F> Deref for LoggedCallable<'a, A, R, F>
 where
     F: FnOnce<A, Output = R>,
 {
-    type Target = AtomicCallable<A, R, F>;
+    type Target = Callable<A, R, F>;
 
     fn deref(&self) -> &Self::Target {
-        return &self.atomic_callable;
+        return &self.callable;
     }
 }
 
@@ -433,17 +417,30 @@ where
     F: FnOnce<A, Output = R>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        return &mut self.atomic_callable;
+        return &mut self.callable;
     }
+}
+
+/// A trait that exists solely to specialize the implementation of `new` and
+/// `args` methods in `LoggedCallable` for the case of no arguments
+pub trait LoggedCallableCreate<
+    A, // arguments as a tuple
+    R, // return type
+    F, // Fn trait (like Fn, FnOnce, and FnMut)
+> where
+    F: FnOnce<A, Output = R>,
+{
+    fn new<S: Into<String>>(handle: F, handle_string: S) -> Self;
+    fn args<S: Into<String>>(self: Self, arguments: A, arguments_string: S) -> Self;
 }
 
 impl<'a, A, R, F> LoggedCallableCreate<A, R, F> for LoggedCallable<'a, A, R, F>
 where
     F: FnOnce<A, Output = R>,
 {
-    default fn new<S: Into<String>>(self, handle: F, handle_string: S) -> Self {
+    default fn new<S: Into<String>>(handle: F, handle_string: S) -> Self {
         return LoggedCallable {
-            atomic_callable: AtomicCallable { handle: Some(handle), arguments: None },
+            callable: Callable::new(handle),
             logging_data: Some(LoggingData {
                 handle: handle_string.into(),
                 arguments: String::new(),
@@ -452,7 +449,7 @@ where
         };
     }
 
-    default fn args<S: Into<String>>(mut self, arguments: A, arguments_string: S) -> Self {
+    fn args<S: Into<String>>(mut self, arguments: A, arguments_string: S) -> Self {
         self.arguments = Some(arguments);
         if let Some(mut logging_data_inner) = self.logging_data.as_mut() {
             logging_data_inner.arguments = arguments_string.into();
@@ -465,9 +462,9 @@ impl<'a, R, F> LoggedCallableCreate<(), R, F> for LoggedCallable<'a, (), R, F>
 where
     F: FnOnce<(), Output = R>,
 {
-    fn new<S: Into<String>>(self, handle: F, handle_string: S) -> Self {
+    fn new<S: Into<String>>(handle: F, handle_string: S) -> Self {
         return LoggedCallable {
-            atomic_callable: AtomicCallable { handle: Some(handle), arguments: Some(()) },
+            callable: Callable::new(handle),
             logging_data: Some(LoggingData {
                 handle: handle_string.into(),
                 arguments: String::from("()"),
@@ -475,26 +472,20 @@ where
             logging_format: None,
         };
     }
-
-    fn args<S: Into<String>>(mut self, arguments: (), arguments_string: S) -> Self {
-        self.arguments = Some(arguments);
-        if let Some(mut logging_data_inner) = self.logging_data.as_mut() {
-            logging_data_inner.arguments = arguments_string.into();
-        }
-        return self;
-    }
 }
 
 impl<'a, A, R, F> LoggedCallable<'a, A, R, F>
 where
     F: FnOnce<A, Output = R>,
 {
-    pub fn generate_log(&self, output: &Result<R, Error>) -> Result<String, Error> {
+    pub fn generate_log(&self, result: &Result<R, Error>) -> Result<String, Error> {
 
         let handle_string = &self.logging_data.as_ref().context(CallableHandleStringMissing)?.handle;
         let arguments_string = &self.logging_data.as_ref().context(CallableHandleStringMissing)?.arguments;
-        let default_output_string = String::new();
-        let output_string = output.as_ref().unwrap_or(&default_output_string);
+        let output_string = match result.as_ref() {
+            Ok(inner) => inner.represent(),
+            Err(inner) => inner.represent(),
+        };
 
         self.logging_format.context(CallableLoggingFormatMissing)?.iter().fold(
             Ok(String::new()),
@@ -514,35 +505,6 @@ where
     }
 }
 
-impl<'a, A, R, F> CallableOutputString<R> for LoggedCallable<'a, A, R, F>
-where
-    F: FnOnce<A, Output = R>,
-{
-    default fn get_output_string(&self, _callable_output: &R) -> String {
-        return format!("");
-    }
-}
-
-impl<'a, A, R, F> CallableOutputString<R> for LoggedCallable<'a, A, R, F>
-where
-    R: Debug,
-    F: FnOnce<A, Output = R>,
-{
-    default fn get_output_string(&self, callable_output: &R) -> String {
-        return format!("{:?}", callable_output);
-    }
-}
-
-impl<'a, A, R, F> CallableOutputString<R> for LoggedCallable<'a, A, R, F>
-where
-    R: Display + Debug,
-    F: FnOnce<A, Output = R>,
-{
-    fn get_output_string(&self, callable_output: &R) -> String {
-        return format!("{:?}", callable_output);
-    }
-}
-
 impl<'a, A, R, F> RunAndReturn for LoggedCallable<'a, A, R, F>
 where
     F: FnOnce<A, Output = R>,
@@ -550,52 +512,9 @@ where
     type ReturnType = R;
 
     default fn run_and_return(&mut self) -> Result<Self::ReturnType, Error> {
-        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
-            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
-            let handle: F = self.handle.take().context(CallableHandleMissing)?;
-            Ok(handle.call_once(arguments))
-        }));
-        let output = match output {
-            Ok(inner) => inner,
-            Err(_inner) => CallablePanicked.fail().into(),
-        };
-        output.map_err(|error: CallableError| -> Error { error.into() })
-    }
-}
-
-impl<'a, A, R, F> RunAndReturn for LoggedCallable<'a, A, R, F>
-where
-    F: FnMut<A, Output = R>,
-{
-    default fn run_and_return(&mut self) -> Result<Self::ReturnType, Error> {
-        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
-            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
-            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
-            Ok(handle.call_mut(arguments))
-        }));
-        let output = match output {
-            Ok(inner) => inner,
-            Err(_inner) => CallablePanicked.fail().into(),
-        };
-        output.map_err(|error| -> Error { error.into() })
-    }
-}
-
-impl<'a, A, R, F> RunAndReturn for LoggedCallable<'a, A, R, F>
-where
-    F: Fn<A, Output = R>,
-{
-    fn run_and_return(&mut self) -> Result<Self::ReturnType, Error> {
-        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
-            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
-            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
-            Ok(handle.call(arguments))
-        }));
-        let output = match output {
-            Ok(inner) => inner,
-            Err(_inner) => CallablePanicked.fail().into(),
-        };
-        output.map_err(|error| -> Error { error.into() })
+        let result = self.callable.run_and_return();
+        self.generate_log(&result); // TODO: Use this to log
+        return result;
     }
 }
 
@@ -604,52 +523,9 @@ where
     F: FnOnce<A, Output = R>,
 {
     default fn run(&mut self) -> Result<(), Error> {
-        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
-            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
-            let handle: F = self.handle.take().context(CallableHandleMissing)?;
-            Ok(handle.call_once(arguments))
-        }));
-        let output = match output {
-            Ok(inner) => inner,
-            Err(_inner) => CallablePanicked.fail().into(),
-        };
-        output.map_err(|error: CallableError| -> Error { error.into() }).map(|_inner| ())
-    }
-}
-
-impl<'a, A, R, F> Run for LoggedCallable<'a, A, R, F>
-where
-    F: FnMut<A, Output = R>,
-{
-    default fn run(&mut self) -> Result<(), Error> {
-        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
-            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
-            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
-            Ok(handle.call_mut(arguments))
-        }));
-        let output = match output {
-            Ok(inner) => inner,
-            Err(_inner) => CallablePanicked.fail().into(),
-        };
-        output.map_err(|error| -> Error { error.into() }).map(|_inner| ())
-    }
-}
-
-impl<'a, A, R, F> Run for LoggedCallable<'a, A, R, F>
-where
-    F: Fn<A, Output = R>,
-{
-    fn run(&mut self) -> Result<(), Error> {
-        let output = panic::catch_unwind(AssertUnwindSafe(|| -> Result<R, CallableError> {
-            let arguments: A = self.arguments.take().context(CallableArgumentsMissing)?;
-            let handle: &mut F = self.handle.as_mut().context(CallableHandleMissing)?;
-            Ok(handle.call(arguments))
-        }));
-        let output = match output {
-            Ok(inner) => inner,
-            Err(_inner) => CallablePanicked.fail().into(),
-        };
-        output.map_err(|error| -> Error { error.into() }).map(|_inner| ())
+        let result = self.callable.run_and_return();
+        self.generate_log(&result); // TODO: Use this to log
+        return result.map(|_inner| ());
     }
 }
 
@@ -661,7 +537,9 @@ where
         &mut self,
         callback: C,
     ) -> Result<(), Error> {
-        match self.run_and_return() {
+        let result = self.callable.run_and_return();
+        self.generate_log(&result); // TODO: Use this to log
+        match result {
             Ok(inner) => Ok(callback(inner)),
             Err(inner) => Err(inner),
         }
@@ -674,7 +552,9 @@ where
     F: FnOnce<A, Output = R>,
 {
     fn run_and_debug(&mut self) -> Result<String, Error> {
-        match self.run_and_return() {
+        let result = self.callable.run_and_return();
+        self.generate_log(&result); // TODO: Use this to log
+        match result {
             Ok(inner) => Ok(format!("{:?}", inner)),
             Err(inner) => Err(inner),
         }
@@ -687,7 +567,9 @@ where
     F: FnOnce<A, Output = R>,
 {
     fn run_and_display(&mut self) -> Result<String, Error> {
-        match self.run_and_return() {
+        let result = self.callable.run_and_return();
+        self.generate_log(&result); // TODO: Use this to log
+        match result {
             Ok(inner) => Ok(format!("{}", inner)),
             Err(inner) => Err(inner),
         }

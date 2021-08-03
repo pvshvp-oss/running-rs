@@ -10,6 +10,7 @@
 
 use async_trait::async_trait;
 use snafu::ResultExt;
+use std::fmt::{Debug, Display};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 mod callable; // for types and traits pertaining to the execution of functions and closures
@@ -25,6 +26,34 @@ pub type Error = Box<dyn ErrorTrait>;
 static TASK_ID_GENERATOR: AtomicUsize = AtomicUsize::new(0); // initialize the unique task ID generator
 pub fn generate_task_id() -> usize {
     TASK_ID_GENERATOR.fetch_add(1, Ordering::Relaxed)
+}
+
+pub trait Represent {
+    fn represent(&self) -> String;
+}
+
+impl<T> Represent for T {
+    default fn represent(&self) -> String {
+        return String::new();
+    }
+}
+
+impl<T> Represent for T
+where
+    T: Debug,
+{
+    default fn represent(&self) -> String {
+        return format!("{:?}", self);
+    }
+}
+
+impl<T> Represent for T
+where
+    T: Display + Debug,
+{
+    fn represent(&self) -> String {
+        return format!("{}", self);
+    }
 }
 
 /// A trait that represents entities that can be executed (or run). This can
